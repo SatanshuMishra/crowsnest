@@ -8,6 +8,7 @@ use futures::stream::{self, StreamExt};
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter};
 
+use crate::arena::division::{self, Divisions, SpecCache};
 use crate::arena::watch::{ArenaEvent, ArenaWatcher};
 use crate::game::{config, install};
 use crate::model::{
@@ -26,6 +27,8 @@ const EXPECTED_VALUES_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 const EXPECTED_VALUES_RETRY_AFTER: Duration = Duration::from_secs(10 * 60);
 const SUPERVISE_INTERVAL: Duration = Duration::from_secs(5);
 const INSTALL_CHECK_EVERY: u64 = 12;
+const DIVISION_RETRY: Duration = Duration::from_secs(3);
+const DIVISION_ATTEMPTS: u32 = 30;
 
 pub fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -85,6 +88,8 @@ struct Shared {
     generation: AtomicU64,
     battle_live: AtomicBool,
     load_task: Mutex<Option<JoinHandle<()>>>,
+    division_task: Mutex<Option<JoinHandle<()>>>,
+    specs: Arc<SpecCache>,
     client: Mutex<Option<SharedClient>>,
     catalog: tokio::sync::Mutex<CatalogCache>,
     expected: tokio::sync::Mutex<ExpectedCache>,
@@ -110,6 +115,8 @@ impl Monitor {
             generation: AtomicU64::new(0),
             battle_live: AtomicBool::new(false),
             load_task: Mutex::new(None),
+            division_task: Mutex::new(None),
+            specs: Arc::new(SpecCache::default()),
             client: Mutex::new(None),
             catalog: tokio::sync::Mutex::new(CatalogCache::default()),
             expected: tokio::sync::Mutex::new(ExpectedCache::Empty),
@@ -324,9 +331,25 @@ impl Monitor {
                 region: install_region.or(install.region),
                 ..install
             }),
-            battle: Some(placeholder),
+            battle: Some(keep_divisions(snapshot.battle.as_ref(), placeholder)),
             notice: region_notice.clone(),
         });
+
+        let replays_dir = settings
+            .replays_dir_override
+            .clone()
+            .or_else(|| install.as_ref().map(|install| install.replays_dir.clone()));
+        if let (Some(install), Some(replays_dir)) = (install.as_ref(), replays_dir) {
+            let monitor = self.clone();
+            let game_root = install.root.clone();
+            let arena = arena.clone();
+            let task = tauri::async_runtime::spawn(async move {
+                monitor
+                    .find_divisions(generation, game_root, watch_root(&replays_dir), arena)
+                    .await;
+            });
+            *lock(&self.0.division_task) = Some(task);
+        }
 
         let client = self.client_for(region, application_id);
         let monitor = self.clone();
@@ -339,8 +362,43 @@ impl Monitor {
     }
 
     fn abort_load(&self) {
-        if let Some(task) = lock(&self.0.load_task).take() {
-            task.abort();
+        for slot in [&self.0.load_task, &self.0.division_task] {
+            if let Some(task) = lock(slot).take() {
+                task.abort();
+            }
+        }
+    }
+
+    async fn find_divisions(
+        &self,
+        generation: u64,
+        game_root: PathBuf,
+        watch_root: PathBuf,
+        arena: ArenaInfo,
+    ) {
+        for _ in 0..DIVISION_ATTEMPTS {
+            if !self.is_current(generation) {
+                return;
+            }
+            let specs = Arc::clone(&self.0.specs);
+            let (game_root, watch_root, arena) =
+                (game_root.clone(), watch_root.clone(), arena.clone());
+            let found = tauri::async_runtime::spawn_blocking(move || {
+                division::read_divisions(&specs, &game_root, &watch_root, &arena)
+            })
+            .await
+            .ok()
+            .flatten();
+            if let Some(divisions) = found {
+                self.update_current(generation, |snapshot| Snapshot {
+                    battle: snapshot
+                        .battle
+                        .map(|battle| with_found_divisions(battle, &divisions)),
+                    ..snapshot
+                });
+                return;
+            }
+            tokio::time::sleep(DIVISION_RETRY).await;
         }
     }
 
@@ -408,7 +466,7 @@ impl Monitor {
                 let phase = self.settled_phase();
                 self.update_current(generation, |snapshot| Snapshot {
                     phase,
-                    battle: Some(failed),
+                    battle: Some(keep_divisions(snapshot.battle.as_ref(), failed)),
                     notice: Some(notice(NoticeLevel::Error, reason.clone())),
                     ..snapshot
                 });
@@ -423,7 +481,7 @@ impl Monitor {
             &roster,
         );
         self.update_current(generation, |snapshot| Snapshot {
-            battle: Some(early),
+            battle: Some(keep_divisions(snapshot.battle.as_ref(), early)),
             ..snapshot
         });
 
@@ -447,7 +505,7 @@ impl Monitor {
         let phase = self.settled_phase();
         self.update_current(generation, |snapshot| Snapshot {
             phase,
-            battle: Some(complete),
+            battle: Some(keep_divisions(snapshot.battle.as_ref(), complete)),
             notice: region_notice
                 .clone()
                 .or(ship_notice.clone())
@@ -754,6 +812,49 @@ fn with_clans(battle: Battle, roster: &Roster) -> Battle {
         enemies: tag(battle.enemies),
         ..battle
     }
+}
+
+fn with_divisions(battle: Battle, division_of: impl Fn(&str) -> Option<u8>) -> Battle {
+    let mark = |team: Team| {
+        let players = team
+            .players
+            .into_iter()
+            .map(|player| Player {
+                division: division_of(&player.name).or(player.division),
+                ..player
+            })
+            .collect();
+        Team::of(players)
+    };
+    Battle {
+        allies: mark(battle.allies),
+        enemies: mark(battle.enemies),
+        ..battle
+    }
+}
+
+fn with_found_divisions(battle: Battle, divisions: &Divisions) -> Battle {
+    with_divisions(battle, |name| divisions.get(name).copied())
+}
+
+fn keep_divisions(previous: Option<&Battle>, next: Battle) -> Battle {
+    let known: Divisions = previous
+        .filter(|previous| previous.id == next.id)
+        .into_iter()
+        .flat_map(|previous| {
+            previous
+                .allies
+                .players
+                .iter()
+                .chain(&previous.enemies.players)
+        })
+        .filter_map(|player| {
+            player
+                .division
+                .map(|division| (player.name.clone(), division))
+        })
+        .collect();
+    with_found_divisions(next, &known)
 }
 
 fn assemble_battle(
@@ -1119,6 +1220,66 @@ mod tests {
         assert_eq!(overall_div3, None);
         assert_eq!(ship_div2, None);
         assert_eq!(ship_div3.map(|line| line.battles), Some(2));
+    }
+
+    fn divisions_by_name(battle: &Battle) -> Vec<(String, Option<u8>)> {
+        battle
+            .allies
+            .players
+            .iter()
+            .chain(&battle.enemies.players)
+            .map(|player| (player.name.clone(), player.division))
+            .collect()
+    }
+
+    fn pending_battle(arena: &ArenaInfo) -> Battle {
+        assemble_battle(arena, None, &ShipCatalog::default(), None, |_| {
+            PlayerStats::Pending
+        })
+    }
+
+    #[test]
+    fn found_divisions_survive_a_later_assembly_of_the_same_battle() {
+        let battle_arena = arena(vec![
+            vehicle("Me", Relation::Me, 1),
+            vehicle("Mate", Relation::Ally, 2),
+            vehicle("Foe", Relation::Enemy, 3),
+        ]);
+        let found: Divisions = [("Me".to_string(), 1), ("Mate".to_string(), 1)]
+            .into_iter()
+            .collect();
+        let shown = with_found_divisions(pending_battle(&battle_arena), &found);
+        let reassembled = keep_divisions(Some(&shown), pending_battle(&battle_arena));
+        assert_eq!(
+            divisions_by_name(&reassembled),
+            vec![
+                ("Mate".to_string(), Some(1)),
+                ("Me".to_string(), Some(1)),
+                ("Foe".to_string(), None),
+            ]
+        );
+    }
+
+    #[test]
+    fn divisions_never_carry_into_another_battle() {
+        let first = arena(vec![
+            vehicle("Me", Relation::Me, 1),
+            vehicle("Mate", Relation::Ally, 2),
+        ]);
+        let next = ArenaInfo {
+            started_at: "2026-11-23T19:30:00".into(),
+            ..first.clone()
+        };
+        let found: Divisions = [("Me".to_string(), 1), ("Mate".to_string(), 1)]
+            .into_iter()
+            .collect();
+        let shown = with_found_divisions(pending_battle(&first), &found);
+        let following = keep_divisions(Some(&shown), pending_battle(&next));
+        assert!(
+            divisions_by_name(&following)
+                .iter()
+                .all(|(_, division)| division.is_none())
+        );
     }
 
     #[test]

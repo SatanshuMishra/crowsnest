@@ -36,6 +36,8 @@ notify-debouncer-full = "0.8"
 roxmltree = "0.21"
 regex = "1"
 futures = "0.3"
+wows_replays = "=0.46.0"
+wowsunpack = "=0.45.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"

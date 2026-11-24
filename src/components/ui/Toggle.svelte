@@ -5,10 +5,22 @@
     description?: string;
     disabled?: boolean;
     onchange: (checked: boolean) => void;
+    onpreview?: (via: "hover" | "focus") => void;
+    describedBy?: string;
   }
 
-  let { checked, label, description, disabled = false, onchange }: Props = $props();
+  let { checked, label, description, disabled = false, onchange, onpreview, describedBy }: Props = $props();
   const id = $props.id();
+  const describers = $derived(
+    [description ? `${id}-description` : null, describedBy ?? null].filter((part) => part !== null).join(" ") ||
+      undefined,
+  );
+
+  function onFocus(event: FocusEvent) {
+    if ((event.currentTarget as HTMLElement).matches(":focus-visible")) {
+      onpreview?.("focus");
+    }
+  }
 </script>
 
 <div class="toggle-row" class:disabled>
@@ -25,9 +37,11 @@
     class="switch"
     aria-checked={checked}
     aria-labelledby="{id}-label"
-    aria-describedby={description ? `${id}-description` : undefined}
+    aria-describedby={describers}
     {disabled}
     onclick={() => onchange(!checked)}
+    onmouseenter={() => onpreview?.("hover")}
+    onfocus={onFocus}
   >
     <span class="thumb"></span>
   </button>

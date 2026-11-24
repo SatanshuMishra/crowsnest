@@ -11,10 +11,18 @@
     description?: string;
     disabled?: boolean;
     onchange: (value: T) => void;
+    onpreview?: (value: T, via: "hover" | "focus") => void;
+    describedBy?: (value: T) => string | undefined;
   }
 
-  let { label, value, options, description, disabled = false, onchange }: Props = $props();
+  let { label, value, options, description, disabled = false, onchange, onpreview, describedBy }: Props = $props();
   const id = $props.id();
+
+  function onFocus(event: FocusEvent, option: T) {
+    if ((event.currentTarget as HTMLElement).matches(":focus-visible")) {
+      onpreview?.(option, "focus");
+    }
+  }
 
   function onKeydown(event: KeyboardEvent) {
     const index = options.findIndex((option) => option.value === value);
@@ -55,8 +63,11 @@
         role="radio"
         aria-checked={option.value === value}
         tabindex={option.value === value ? 0 : -1}
+        aria-describedby={describedBy?.(option.value)}
         {disabled}
         onclick={() => onchange(option.value)}
+        onmouseenter={() => onpreview?.(option.value, "hover")}
+        onfocus={(event) => onFocus(event, option.value)}
       >
         {option.label}
       </button>

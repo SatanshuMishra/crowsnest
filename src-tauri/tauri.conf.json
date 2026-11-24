@@ -1,0 +1,65 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Crowsnest",
+  "mainBinaryName": "crowsnest",
+  "version": "../package.json",
+  "identifier": "io.github.satanshumishra.crowsnest",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Crowsnest",
+        "width": 1280,
+        "height": 760,
+        "minWidth": 960,
+        "minHeight": 540,
+        "center": true,
+        "visible": false,
+        "backgroundColor": "#0d1117"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
+    "publisher": "Satanshu Mishra",
+    "copyright": "Copyright (c) 2026 Satanshu Mishra. MIT License.",
+    "homepage": "https://github.com/SatanshuMishra/crowsnest",
+    "category": "Utility",
+    "shortDescription": "Private, local-first match monitor for World of Warships",
+    "longDescription": "Crowsnest shows the stats of every player in your World of Warships battle the moment it loads. It runs on your machine, keeps no account, sends no telemetry, and talks only to Wargaming's official API.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDExMDlDQTA3NjFERTkzOTgKUldTWWs5NWhCOG9KRVFGT1hhQ29jL250RkdjQkRDd0Z6NFhWWmllZHZaMUV3VExCOVNHRkVQWHYK",
+      "endpoints": [
+        "https://github.com/SatanshuMishra/crowsnest/releases/latest/download/latest.json"
+      ],
+      "windows": { "installMode": "passive" }
+    }
+  }
+}

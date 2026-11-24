@@ -1,0 +1,47 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the main window may call",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-always-on-top",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://wows-numbers.com/*"
+        },
+        {
+          "url": "https://*.wows-numbers.com/*"
+        },
+        {
+          "url": "https://wows-karma.com/*"
+        },
+        {
+          "url": "https://*.wows-karma.com/*"
+        },
+        {
+          "url": "https://worldofwarships.com/*"
+        },
+        {
+          "url": "https://worldofwarships.eu/*"
+        },
+        {
+          "url": "https://worldofwarships.asia/*"
+        },
+        {
+          "url": "https://developers.wargaming.net/*"
+        },
+        {
+          "url": "https://github.com/SatanshuMishra/crowsnest*"
+        }
+      ]
+    },
+    "dialog:allow-open",
+    "updater:default",
+    "process:allow-restart"
+  ]
+}

@@ -1,0 +1,30 @@
+name: Bug report
+description: Something is broken or shows the wrong data
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Crowsnest version
+      description: Shown in Settings, under About.
+    validations:
+      required: true
+  - type: dropdown
+    id: region
+    attributes:
+      label: Server
+      options: [EU, NA, Asia, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: Settings, then Open log folder. Remove anything you do not want to share.
+      render: text

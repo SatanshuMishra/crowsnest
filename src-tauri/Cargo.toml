@@ -37,7 +37,7 @@ roxmltree = "0.21"
 regex = "1"
 futures = "0.3"
 wows_replays = "=0.46.0"
-wowsunpack = "=0.45.0"
+wowsunpack = { version = "=0.45.0", default-features = false, features = ["vfs-mmap"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"

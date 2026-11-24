@@ -1,13 +1,9 @@
 <script lang="ts" module>
   import type { Wash } from "../lib/intro";
 
-  const WELCOME = {
-    kicker: "Before your first battle",
-    title: "Welcome to Crowsnest",
-    body: "Crowsnest shows the statistics of every player in your battle. Take a minute to choose how the player table looks, or keep the defaults. Every choice stays in Settings, Appearance.",
-  };
-
   const WHATS_NEW = "What\u2019s new";
+  const CAPTION = "Each choice applies straight away.";
+  const STEP_WASHES: readonly Wash[] = ["teal", "violet", "green"];
 
   const WASH_PARTNER: Record<Wash, Wash> = {
     teal: "violet",
@@ -20,21 +16,19 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import AppearancePreview from "./appearance/AppearancePreview.svelte";
+  import OptionCards from "./appearance/OptionCards.svelte";
   import PaletteSwatch from "./appearance/PaletteSwatch.svelte";
-  import SetupChoice from "./appearance/SetupChoice.svelte";
   import Button from "./ui/Button.svelte";
   import Icon from "./ui/Icon.svelte";
   import IconButton from "./ui/IconButton.svelte";
-  import { optionFor, type AppearanceKey } from "../lib/appearance";
   import {
-    APPEARANCE_STEPS,
-    onboardingPages,
-    skipLabel,
-    type Hero,
-    type Page,
-    type SetupAudience,
-    type SetupOutcome,
-  } from "../lib/intro";
+    APPEARANCE,
+    optionFor,
+    type AppearanceKey,
+    type AppearanceOption,
+    type AppearanceValues,
+  } from "../lib/appearance";
+  import { APPEARANCE_STEPS, onboardingPages, type Page, type SetupAudience, type SetupOutcome } from "../lib/intro";
   import { focusOnLeave, modalKeys } from "../lib/modal";
   import { app } from "../lib/state.svelte";
   import type { Palette, Settings } from "../lib/types";
@@ -55,54 +49,43 @@
 
   const pages = untrack(() => onboardingPages(audience, settings.introSeen));
   const opening = untrack(() => before ?? $state.snapshot(settings));
+  const canSkip = untrack(() => audience !== "tour");
   const returnFocus = document.activeElement;
 
   let index = $state(0);
   let direction = $state<"forward" | "back">("forward");
   let announcement = $state("");
+  let caption = $state<string | null>(null);
   let closing = $state<"finished" | "closed" | null>(null);
   let card = $state<HTMLDivElement>();
   let heading = $state<HTMLHeadingElement>();
   let primary = $state<HTMLButtonElement>();
 
-  const page = $derived<Page>(pages[index] ?? { kind: "welcome" });
-  const text = $derived(describe(page));
-  const hero = $derived<Hero>(page.kind === "feature" ? page.feature.hero : { kind: "table" });
+  const page = $derived<Page | undefined>(pages[index]);
+  const hero = $derived(page?.kind === "feature" ? page.feature.hero : null);
   const wash = $derived<Wash>(
-    page.kind === "feature" ? page.feature.wash : page.kind === "appearance" ? page.step.wash : "teal",
+    page?.kind === "feature" ? page.feature.wash : (STEP_WASHES[(page?.number ?? 1) - 1] ?? "teal"),
   );
-  const keys = $derived<readonly AppearanceKey[]>(page.kind === "appearance" ? page.step.keys : []);
-  const mark = $derived(keys.includes("highlight"));
+  const mark = $derived(page?.kind === "appearance" && page.step.keys.includes("highlight"));
   const isFirst = $derived(index === 0);
   const isLast = $derived(index === pages.length - 1);
   const changed = $derived(APPEARANCE_KEYS.some((key) => settings[key] !== opening[key]));
-  const skip = $derived(skipLabel(audience, changed));
 
   $effect(() => focusOnLeave(returnFocus));
 
   $effect(() => {
     void tick().then(() => {
-      const choice = card?.querySelector<HTMLElement>(".choices [aria-checked=true]:not(:disabled)");
+      const choice = card?.querySelector<HTMLElement>(".options [aria-checked=true]:not(:disabled)");
       (choice ?? primary)?.focus({ preventScroll: true });
     });
   });
 
-  function describe(current: Page): { kicker: string; title: string; body: string } {
-    if (current.kind === "feature") {
-      return {
-        kicker: WHATS_NEW,
-        title: current.feature.title,
-        body: current.feature.body,
-      };
-    }
-    if (current.kind === "appearance") {
-      return {
-        kicker: `Appearance, step ${current.number} of ${APPEARANCE_STEPS.length}`,
-        title: current.step.title,
-        body: current.step.body,
-      };
-    }
-    return WELCOME;
+  function kickerFor(current: Page): string {
+    return current.kind === "feature" ? WHATS_NEW : `Appearance, step ${current.number} of ${APPEARANCE_STEPS.length}`;
+  }
+
+  function titleFor(current: Page): string {
+    return current.kind === "feature" ? current.feature.title : current.step.title;
   }
 
   function goTo(next: number) {
@@ -111,13 +94,19 @@
       return;
     }
     direction = next > index ? "forward" : "back";
+    caption = null;
     index = next;
-    announcement = `Page ${next + 1} of ${pages.length}: ${describe(target).title}`;
+    announcement = `Page ${next + 1} of ${pages.length}: ${titleFor(target)}`;
     void tick().then(() => {
       if (!card?.contains(document.activeElement)) {
         heading?.focus({ preventScroll: true });
       }
     });
+  }
+
+  function choose(key: AppearanceKey, value: AppearanceValues[AppearanceKey], option: AppearanceOption<unknown>) {
+    caption = `${APPEARANCE[key].label}: ${option.label}.`;
+    void app.update({ [key]: value } as Partial<Settings>);
   }
 
   function close(result: "finished" | "closed") {
@@ -129,7 +118,7 @@
 
   function onanimationend(event: AnimationEvent) {
     if (closing && event.animationName.endsWith("card-out")) {
-      onclose({ changed, finished: closing === "finished" });
+      onclose({ changed });
     }
   }
 </script>
@@ -139,11 +128,12 @@
   <div
     bind:this={card}
     class="card"
+    class:wide={page?.kind === "appearance"}
     class:leaving={closing !== null}
     role="dialog"
     aria-modal="true"
     aria-labelledby="{id}-title"
-    aria-describedby="{id}-body"
+    aria-describedby={page?.kind === "feature" ? `${id}-body` : `${id}-kicker`}
     tabindex="-1"
     {@attach modalKeys(() => close("closed"), () => heading)}
     {onanimationend}
@@ -154,47 +144,70 @@
     <p class="visually-hidden" aria-live="polite">{announcement}</p>
 
     {#key index}
-      <div class="page" class:intro={page.kind !== "appearance"} class:back={direction === "back"}>
-        <div
-          class="hero"
-          style:--wash="var(--wash-{wash})"
-          style:--wash-2="var(--wash-{WASH_PARTNER[wash]})"
-        >
-          {#if hero.kind === "palettes"}
-            <ul class="palettes" aria-hidden="true">
-              {#each PALETTES as palette (palette)}
-                <li>
-                  <span>{optionFor("palette", palette).label}</span>
-                  <PaletteSwatch {palette} theme={app.theme} />
-                </li>
+      {#if page?.kind === "appearance"}
+        <div class="page steps" class:back={direction === "back"}>
+          <header
+            class="head wash"
+            style:--wash="var(--wash-{wash})"
+            style:--wash-2="var(--wash-{WASH_PARTNER[wash]})"
+          >
+            <p class="kicker" id="{id}-kicker">{kickerFor(page)}</p>
+            <h2 id="{id}-title" tabindex="-1" bind:this={heading}>{page.step.title}</h2>
+          </header>
+          <div class="split">
+            <section class="options" aria-labelledby="{id}-title">
+              {#each page.step.keys as key (key)}
+                <OptionCards
+                  {key}
+                  {settings}
+                  theme={app.theme}
+                  onchange={(value, option) => choose(key, value, option)}
+                />
               {/each}
-            </ul>
-          {:else if hero.kind === "glyphs"}
-            <div class="glyphs" aria-hidden="true">
-              {#each hero.icons as icon (icon)}
-                <span class="tile"><Icon name={icon} size={32} /></span>
-              {/each}
-            </div>
-          {:else}
-            <div class="window">
+            </section>
+            <aside class="preview" aria-labelledby="{id}-preview">
+              <div class="preview-head">
+                <h3 id="{id}-preview">Preview</h3>
+                <span class="note">Sample team</span>
+              </div>
               <AppearancePreview {settings} theme={app.theme} {mark} />
-            </div>
-          {/if}
+              <p class="caption" aria-live="polite">{caption ?? CAPTION}</p>
+            </aside>
+          </div>
         </div>
-
-        <div class="content">
-          <p class="kicker">{text.kicker}</p>
-          <h2 id="{id}-title" tabindex="-1" bind:this={heading}>{text.title}</h2>
-          <p class="body" id="{id}-body">{text.body}</p>
-          {#if keys.length > 0}
-            <div class="choices">
-              {#each keys as key (key)}
-                <SetupChoice {key} {settings} />
-              {/each}
-            </div>
-          {/if}
+      {:else if page}
+        <div class="page intro" class:back={direction === "back"}>
+          <div
+            class="hero wash"
+            style:--wash="var(--wash-{wash})"
+            style:--wash-2="var(--wash-{WASH_PARTNER[wash]})"
+          >
+            {#if hero?.kind === "palettes"}
+              <ul class="palettes" aria-hidden="true">
+                {#each PALETTES as palette (palette)}
+                  <li>
+                    <span>{optionFor("palette", palette).label}</span>
+                    <PaletteSwatch {palette} theme={app.theme} />
+                  </li>
+                {/each}
+              </ul>
+            {:else if hero?.kind === "glyphs"}
+              <div class="glyphs" aria-hidden="true">
+                {#each hero.icons as icon (icon)}
+                  <span class="tile"><Icon name={icon} size={32} /></span>
+                {/each}
+              </div>
+            {/if}
+          </div>
+          <div class="content">
+            <p class="kicker" id="{id}-kicker">{kickerFor(page)}</p>
+            <h2 id="{id}-title" tabindex="-1" bind:this={heading}>{titleFor(page)}</h2>
+            {#if page.kind === "feature"}
+              <p class="body" id="{id}-body">{page.feature.body}</p>
+            {/if}
+          </div>
         </div>
-      </div>
+      {/if}
     {/key}
 
     <footer class="foot">
@@ -206,8 +219,8 @@
       <div class="actions">
         {#if !isFirst}
           <Button size="lg" onclick={() => goTo(index - 1)}>Back</Button>
-        {:else if skip}
-          <Button variant="ghost" size="lg" onclick={() => close("closed")}>{skip}</Button>
+        {:else if canSkip}
+          <Button variant="ghost" size="lg" onclick={() => close("closed")}>Skip</Button>
         {/if}
         <Button
           variant="primary"
@@ -250,7 +263,12 @@
     border-radius: var(--radius-xl);
     background: var(--surface-raised);
     box-shadow: var(--shadow-pop);
+    transition: width var(--duration-base) var(--ease-out);
     animation: card-in var(--duration-base) var(--ease-out);
+  }
+
+  .card.wide {
+    width: min(var(--onboarding-wide-width), 100%);
   }
 
   .card:focus {
@@ -324,11 +342,7 @@
     }
   }
 
-  .hero {
-    position: relative;
-    flex: none;
-    height: var(--onboarding-hero);
-    overflow: hidden;
+  .wash {
     background:
       radial-gradient(
         80% 110% at 12% 0%,
@@ -342,20 +356,11 @@
       );
   }
 
-  .intro .hero {
+  .hero {
+    position: relative;
     flex: 1 1 auto;
-    height: auto;
     min-height: var(--onboarding-hero);
-  }
-
-  .window {
-    position: absolute;
-    right: var(--space-6);
-    bottom: 0;
-    left: var(--space-6);
-    max-height: calc(100% - var(--space-6));
     overflow: hidden;
-    mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent);
   }
 
   .palettes {
@@ -394,7 +399,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: var(--space-4);
   }
 
   .tile {
@@ -413,23 +417,22 @@
   }
 
   .content {
-    flex: 1 1 auto;
-    min-height: 0;
-    padding: var(--space-4) var(--space-6) var(--space-2);
-    overflow-y: auto;
-  }
-
-  .intro .content {
     flex: none;
+    padding: var(--space-4) var(--space-6) var(--space-2);
   }
 
   p {
     margin: 0;
   }
 
-  .kicker {
+  .kicker,
+  .note,
+  .caption {
     color: var(--text-muted);
     font-size: var(--fs-sm);
+  }
+
+  .kicker {
     font-weight: var(--weight-medium);
   }
 
@@ -459,10 +462,58 @@
     line-height: 1.5;
   }
 
-  .choices {
-    display: grid;
-    gap: var(--space-2);
-    margin-top: var(--space-4);
+  .head {
+    flex: none;
+    padding: var(--space-5) var(--space-6) var(--space-4);
+  }
+
+  .steps h2 {
+    font-size: var(--fs-xl);
+  }
+
+  .split {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    border-block: 1px solid var(--border);
+  }
+
+  .options {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--space-4);
+    width: var(--onboarding-options-width);
+    padding: var(--space-4) var(--space-5) var(--space-4) var(--space-6);
+    overflow-y: auto;
+  }
+
+  .preview {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+    padding: var(--space-4) var(--space-6) var(--space-4) var(--space-5);
+    overflow-y: auto;
+    border-left: 1px solid var(--border);
+  }
+
+  .preview-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  h3 {
+    margin: 0;
+    font-size: var(--fs-sm);
+    font-weight: var(--weight-strong);
+  }
+
+  .caption {
+    min-height: 1.5em;
   }
 
   .foot {
@@ -509,17 +560,8 @@
       --onboarding-hero: 8.5rem;
     }
 
-    .window {
-      max-height: calc(100% - var(--space-4));
-    }
-
-    .content {
-      padding-block: var(--space-3) 0;
-    }
-
-    .choices {
-      gap: var(--space-1);
-      margin-top: var(--space-3);
+    .head {
+      padding-block: var(--space-4) var(--space-3);
     }
 
     .foot {
@@ -536,6 +578,7 @@
       animation-duration: 1ms;
     }
 
+    .card,
     .dots span {
       transition: none;
     }

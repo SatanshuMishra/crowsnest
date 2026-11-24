@@ -34,6 +34,7 @@
     border-radius: var(--radius-md);
     background: var(--surface-raised);
     color: var(--text);
+    --table-surface: var(--surface-raised);
     font-size: var(--fs-md);
   }
 </style>

@@ -97,13 +97,13 @@
     position: sticky;
     top: calc(var(--scroll-inset-top, 0px) * -1);
     z-index: 1;
-    background: var(--bg);
+    background: var(--table-surface, var(--bg));
   }
 
   th {
     padding: var(--space-1) var(--cell-pad);
     border-bottom: 1px solid var(--border-strong);
-    background: var(--bg);
+    background: var(--table-surface, var(--bg));
     color: var(--text-muted);
     font-size: var(--fs-xs);
     font-weight: var(--weight-regular);
@@ -120,7 +120,7 @@
     padding-bottom: var(--space-1);
     border-bottom: 0;
     background: linear-gradient(var(--border-strong), var(--border-strong)) center bottom / calc(100% - var(--space-3)) 1px
-      no-repeat var(--bg);
+      no-repeat var(--table-surface, var(--bg));
     text-align: center;
   }
 

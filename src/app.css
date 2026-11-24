@@ -32,6 +32,8 @@
   --popover-width: 36.25rem;
   --onboarding-width: 46rem;
   --onboarding-height: 40rem;
+  --onboarding-wide-width: 60rem;
+  --onboarding-options-width: 22.5rem;
   --onboarding-hero: clamp(8.5rem, 30vh, 13.5rem);
   --onboarding-tile: 4.5rem;
   --toast-width: 23.75rem;

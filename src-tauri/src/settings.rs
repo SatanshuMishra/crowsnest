@@ -3,7 +3,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use tauri_plugin_window_state::DEFAULT_FILENAME as WINDOW_STATE_FILE;
 
 use crate::model::Region;
 
@@ -114,7 +113,7 @@ impl Default for Settings {
             always_on_top: false,
             close_to_tray: false,
             check_for_updates: true,
-            intro_seen: Some(0),
+            intro_seen: None,
         }
     }
 }
@@ -168,16 +167,8 @@ impl SettingsFile {
     pub fn load(&self) -> Result<Settings, SettingsError> {
         match fs::read(&self.path) {
             Ok(bytes) => serde_json::from_slice(&bytes).map_err(SettingsError::Parse),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(self.first_settings()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Settings::default()),
             Err(error) => Err(SettingsError::Read(error)),
-        }
-    }
-
-    fn first_settings(&self) -> Settings {
-        let opened_before = self.path.with_file_name(WINDOW_STATE_FILE).exists();
-        Settings {
-            intro_seen: if opened_before { None } else { Some(0) },
-            ..Settings::default()
         }
     }
 
@@ -247,23 +238,11 @@ mod tests {
     }
 
     #[test]
-    fn a_fresh_install_has_seen_no_intro() {
-        assert_eq!(Settings::default().intro_seen, Some(0));
-    }
-
-    #[test]
-    fn an_earlier_install_without_saved_settings_reads_as_updating() {
+    fn a_fresh_install_has_seen_no_release() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join(WINDOW_STATE_FILE), b"{}").unwrap();
         let loaded = SettingsFile::in_dir(dir.path()).load().unwrap();
         assert_eq!(loaded.intro_seen, None);
-        assert_eq!(
-            loaded,
-            Settings {
-                intro_seen: None,
-                ..Settings::default()
-            }
-        );
+        assert_eq!(loaded, Settings::default());
     }
 
     #[test]

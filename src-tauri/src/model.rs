@@ -255,8 +255,12 @@ pub enum PlayerStats {
         account_id: u64,
         overall: StatLine,
         overall_solo: Option<StatLine>,
+        overall_div2: Option<StatLine>,
+        overall_div3: Option<StatLine>,
         ship: Option<StatLine>,
         ship_solo: Option<StatLine>,
+        ship_div2: Option<StatLine>,
+        ship_div3: Option<StatLine>,
         ship_state: ShipStatsState,
         created_at: Option<i64>,
     },
@@ -346,6 +350,7 @@ pub struct Notice {
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub phase: Phase,
+    pub connected: bool,
     pub install: Option<GameInstall>,
     pub battle: Option<Battle>,
     pub notice: Option<Notice>,
@@ -355,6 +360,7 @@ impl Snapshot {
     pub fn initial() -> Snapshot {
         Snapshot {
             phase: Phase::NeedsInstall,
+            connected: false,
             install: None,
             battle: None,
             notice: None,
@@ -367,14 +373,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_new_snapshot_reports_no_game_connection_on_the_wire() {
+        let wire = serde_json::to_value(Snapshot::initial()).unwrap();
+        assert_eq!(wire["connected"], serde_json::Value::Bool(false));
+    }
+
+    #[test]
     fn player_stats_fields_are_camel_case_on_the_wire() {
         let line = StatLine::from_totals(Totals::default(), None);
         let loaded = PlayerStats::Loaded {
             account_id: 7,
             overall: line,
             overall_solo: None,
+            overall_div2: None,
+            overall_div3: None,
             ship: None,
             ship_solo: None,
+            ship_div2: None,
+            ship_div3: None,
             ship_state: ShipStatsState::Unavailable,
             created_at: None,
         };
@@ -383,6 +399,8 @@ mod tests {
         assert_eq!(json["accountId"], 7);
         assert!(json.get("overallSolo").is_some());
         assert!(json.get("shipSolo").is_some());
+        assert!(json.get("overallDiv2").is_some());
+        assert!(json.get("shipDiv3").is_some());
         assert!(json.get("createdAt").is_some());
         assert_eq!(json["shipState"], "unavailable");
         let hidden = serde_json::to_value(PlayerStats::Hidden { account_id: 3 }).unwrap();

@@ -1,8 +1,8 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import PlayerDetail from "../components/monitor/PlayerDetail.svelte";
   import StatusView from "../components/monitor/StatusView.svelte";
   import TeamTable from "../components/monitor/TeamTable.svelte";
-  import TopBar from "../components/monitor/TopBar.svelte";
   import { app } from "../lib/state.svelte";
   import type { Player } from "../lib/types";
 
@@ -37,9 +37,10 @@
     selection = { side, name: player.name, row };
   }
 
-  function closePlayer() {
+  async function closePlayer() {
     const row = selection?.row;
     selection = null;
+    await tick();
     if (row?.isConnected) {
       row.focus();
     }
@@ -48,26 +49,27 @@
 
 {#if snapshot && settings}
   <div class="monitor">
-    <TopBar {snapshot} />
-    <main class="content">
+    <main class="content" inert={selectedPlayer !== null}>
       <StatusView {snapshot} {settings} {battleShown} />
       {#if battle && battleShown}
-        <div class="teams">
-          <TeamTable
-            side="allies"
-            title="Allies"
-            players={battle.allies.players}
-            {settings}
-            onopen={(player, row) => openPlayer("allies", player, row)}
-          />
-          <TeamTable
-            side="enemies"
-            title="Enemies"
-            players={battle.enemies.players}
-            {settings}
-            onopen={(player, row) => openPlayer("enemies", player, row)}
-          />
-        </div>
+        {#key battle.id}
+          <div class="teams">
+            <TeamTable
+              side="allies"
+              title="Allies"
+              players={battle.allies.players}
+              {settings}
+              onopen={(player, row) => openPlayer("allies", player, row)}
+            />
+            <TeamTable
+              side="enemies"
+              title="Enemies"
+              players={battle.enemies.players}
+              {settings}
+              onopen={(player, row) => openPlayer("enemies", player, row)}
+            />
+          </div>
+        {/key}
       {/if}
     </main>
     <PlayerDetail player={selectedPlayer} {region} {settings} onclose={closePlayer} />
@@ -85,24 +87,35 @@
     display: flex;
     flex: 1;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: var(--space-5);
+    position: relative;
+    --scroll-inset-top: var(--space-5);
     min-height: 0;
-    padding: var(--space-2) var(--space-3) var(--space-3);
+    padding: var(--scroll-inset-top) var(--space-5) var(--space-4);
     overflow: auto;
   }
 
   .teams {
     display: grid;
     flex: 1;
+    animation: teams-in calc(var(--duration-base) * 1.25) var(--ease-out);
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-3);
+    gap: var(--space-6);
     min-height: 0;
+  }
+
+  @keyframes teams-in {
+    from {
+      opacity: 0;
+      translate: 0 var(--space-1);
+    }
   }
 
   @media (width < 1100px) {
     .teams {
       flex: none;
       grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-6);
     }
   }
 </style>

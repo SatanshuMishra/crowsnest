@@ -17,19 +17,45 @@
     onclose: () => void;
   }
 
-  let { player, region, settings, onclose }: Props = $props();
+  let { player: requested, region, settings, onclose }: Props = $props();
   const id = $props.id();
+
+  let player = $state.raw<Player | null>(null);
+
+  $effect.pre(() => {
+    if (requested) {
+      player = requested;
+    }
+  });
 
   let dialog = $state<HTMLDialogElement>();
   let linkError = $state<string | null>(null);
 
+  type Split = "all" | "solo" | "div2" | "div3";
+
   interface LineColumn {
     id: string;
     name: string;
+    title: string;
+    spoken: string;
     scope: StatScope;
     line: StatLine | null;
     expected: ExpectedStats | null;
   }
+
+  interface LineGroup {
+    id: string;
+    name: string;
+    pending: boolean;
+    columns: LineColumn[];
+  }
+
+  const SPLITS: ReadonlyArray<{ id: Split; name: string; title: string; spoken: string }> = [
+    { id: "all", name: "All", title: "All random battles", spoken: "all battles" },
+    { id: "solo", name: "Solo", title: "Random battles played without a division", spoken: "solo" },
+    { id: "div2", name: "Div 2", title: "Random battles in a two-player division", spoken: "two-player division" },
+    { id: "div3", name: "Div 3", title: "Random battles in a three-player division", spoken: "three-player division" },
+  ];
 
   const ROWS: ReadonlyArray<{ kind: StatKind; name: string }> = [
     { kind: "battles", name: "Battles" },
@@ -52,26 +78,57 @@
   const stats = $derived(player?.stats ?? null);
   const badge = $derived(player?.ship ? shipClassBadge(player.ship.class) : null);
   const links = $derived(player ? playerLinks(region, player.stats, player.name) : []);
-  const lineColumns = $derived.by<LineColumn[]>(() => {
+  const groups = $derived.by<LineGroup[]>(() => {
     if (!player || stats?.kind !== "loaded") {
       return [];
     }
-    return [
-      { id: "overall", name: "Overall", scope: "account", line: stats.overall, expected: null },
-      { id: "overall-solo", name: "Solo", scope: "account", line: stats.overallSolo, expected: null },
-      { id: "ship", name: "Ship", scope: "ship", line: stats.ship, expected: player.expected },
-      { id: "ship-solo", name: "Ship solo", scope: "ship", line: stats.shipSolo, expected: player.expected },
-    ];
+    const account: LineGroup = {
+      id: "account",
+      name: "Account",
+      pending: false,
+      columns: columnsFor(
+        "account",
+        { all: stats.overall, solo: stats.overallSolo, div2: stats.overallDiv2, div3: stats.overallDiv3 },
+        null,
+      ),
+    };
+    const ship: LineGroup = {
+      id: "ship",
+      name: "This ship",
+      pending: stats.shipState === "pending",
+      columns: columnsFor(
+        "ship",
+        { all: stats.ship, solo: stats.shipSolo, div2: stats.shipDiv2, div3: stats.shipDiv3 },
+        player.expected,
+      ),
+    };
+    return stats.ship !== null || ship.pending ? [account, ship] : [account];
   });
+
+  function columnsFor(
+    group: StatScope,
+    lines: Record<Split, StatLine | null>,
+    expected: ExpectedStats | null,
+  ): LineColumn[] {
+    return SPLITS.map((split) => ({
+      id: `${group}-${split.id}`,
+      name: split.name,
+      title: split.title,
+      spoken: split.spoken,
+      scope: group,
+      line: lines[split.id],
+      expected,
+    }));
+  }
 
   $effect(() => {
     if (!dialog) {
       return;
     }
-    if (player && !dialog.open) {
+    if (requested && !dialog.open) {
       linkError = null;
-      dialog.showModal();
-    } else if (!player && dialog.open) {
+      dialog.show();
+    } else if (!requested && dialog.open) {
       dialog.close();
     }
   });
@@ -82,6 +139,13 @@
 
   function onBackdrop(event: MouseEvent) {
     if (event.target === dialog) {
+      close();
+    }
+  }
+
+  function onKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape" && dialog?.open && !event.defaultPrevented) {
+      event.preventDefault();
       close();
     }
   }
@@ -104,160 +168,184 @@
   }
 </script>
 
+<svelte:window onkeydown={onKeydown} />
+
 <dialog bind:this={dialog} class="sheet" aria-labelledby="{id}-title" onclose={onclose} onclick={onBackdrop}>
-  {#if player && stats}
-    <div class="body">
-      <header>
-        <div class="heading">
-          <p class="relation {player.relation}">{RELATIONS[player.relation]}</p>
-          <h2 id="{id}-title">
-            {#if player.clanTag}<span class="clan">[{player.clanTag}]</span>{/if}
-            {player.name}
-          </h2>
-          {#if player.ship}
-            <p class="ship">
-              <span class="tier"><span class="visually-hidden">Tier </span>{romanNumeral(player.ship.tier)}</span>
-              {player.ship.name}{#if badge}<span class="class-name"> · {badge.name}</span>{/if}
-            </p>
-          {:else}
-            <p class="ship" title="Ship id {player.shipId}">Unknown ship</p>
-          {/if}
-        </div>
-        <IconButton icon="close" label="Close player details" onclick={close} />
-      </header>
-
-      {#if stats.kind === "loaded"}
-        <table class="lines">
-          <caption class="visually-hidden">Random battle statistics</caption>
-          <thead>
-            <tr>
-              <td></td>
-              {#each lineColumns as column (column.id)}
-                <th scope="col" class="num">{column.name}</th>
-              {/each}
-            </tr>
-          </thead>
-          <tbody>
-            {#each ROWS as row (row.kind)}
-              <tr>
-                <th scope="row">{row.name}</th>
-                {#each lineColumns as column (column.id)}
-                  {@const value = column.line ? lineValue(column.line, row.kind) : null}
-                  <StatCell
-                    kind={row.kind}
-                    label="{row.name}, {column.name.toLowerCase()}"
-                    {value}
-                    tier={statTier(row.kind, value, column.expected)}
-                    rated={rated(column, row.kind)}
-                    colored={settings.coloredValues}
-                    pending={loading(column, row.kind)}
-                  />
-                {/each}
-              </tr>
-            {/each}
-            <tr>
-              <th scope="row">Survival rate</th>
-              {#each lineColumns as column (column.id)}
-                {#if loading(column, null)}
-                  <StatCell kind="winRate" label="Survival rate, {column.name.toLowerCase()}" rated={false} pending />
-                {:else}
-                  <td class="num plain">{formatWinRate(column.line?.survivalRate)}</td>
-                {/if}
-              {/each}
-            </tr>
-          </tbody>
-        </table>
-        {#if stats?.kind === "loaded" && stats.shipState === "unavailable"}
-          <p class="note">Wargaming did not return ship statistics for this player. Press Refresh to try again.</p>
-        {/if}
-        <p class="note">
-          Ship columns cover this ship only; solo columns leave out battles played in a division. Personal rating uses
-          expected values from wows-numbers.com.
-        </p>
-      {:else if stats.kind === "pending"}
-        <p class="state" aria-busy="true">Loading statistics from Wargaming.</p>
-      {:else if stats.kind === "bot"}
-        <p class="state">This is a bot. Bots have no statistics.</p>
-      {:else if stats.kind === "hidden"}
-        <p class="state with-icon">
-          <Icon name="eyeOff" />
-          This player has hidden their profile, so Wargaming shares no statistics for it.
-        </p>
-      {:else if stats.kind === "notFound"}
-        <p class="state">Wargaming has no account with this name on this server.</p>
-      {:else if stats.kind === "failed"}
-        <p class="state with-icon error">
-          <Icon name="error" />
-          <span>Statistics are unavailable: {stats.reason}</span>
-        </p>
-      {/if}
-
-      {#if links.length > 0}
-        <section class="links" aria-labelledby="{id}-links">
-          <h3 id="{id}-links">Profiles</h3>
-          <div class="link-row">
-            {#each links as link (link.id)}
-              <Button size="sm" onclick={() => follow(link.url)}>
-                {link.label}
-                <Icon name="external" size={14} />
-                <span class="visually-hidden">(opens in your browser)</span>
-              </Button>
-            {/each}
+  <div class="panel">
+    {#if player && stats}
+      <div class="body">
+        <header>
+          <div class="heading">
+            <p class="relation {player.relation}">{RELATIONS[player.relation]}</p>
+            <h2 id="{id}-title">
+              {#if player.clanTag}<span class="clan">[{player.clanTag}]</span>{/if}
+              {player.name}
+            </h2>
+            {#if player.ship}
+              <p class="ship">
+                <span class="tier"><span class="visually-hidden">Tier </span>{romanNumeral(player.ship.tier)}</span>
+                {player.ship.name}{#if badge}<span class="class-name"> · {badge.name}</span>{/if}
+              </p>
+            {:else}
+              <p class="ship" title="Ship id {player.shipId}">Unknown ship</p>
+            {/if}
           </div>
-          {#if linkError}
-            <p class="link-error" role="alert">{linkError}</p>
+          <IconButton icon="close" label="Close player details" autofocus onclick={close} />
+        </header>
+
+        {#if stats.kind === "loaded"}
+          {#each groups as group (group.id)}
+            <table class="lines">
+              <caption>{group.name}</caption>
+              <thead>
+                <tr>
+                  <td></td>
+                  {#each group.columns as column (column.id)}
+                    <th scope="col" class="num" title={column.title}>{column.name}</th>
+                  {/each}
+                </tr>
+              </thead>
+              <tbody>
+                {#each ROWS as row (row.kind)}
+                  <tr>
+                    <th scope="row">{row.name}</th>
+                    {#each group.columns as column (column.id)}
+                      {@const value = column.line ? lineValue(column.line, row.kind) : null}
+                      <StatCell
+                        kind={row.kind}
+                        label="{row.name}, {group.name.toLowerCase()}, {column.spoken}"
+                        {value}
+                        tier={statTier(row.kind, value, column.expected)}
+                        rated={rated(column, row.kind)}
+                        colored={settings.coloredValues}
+                        pending={loading(column, row.kind)}
+                      />
+                    {/each}
+                  </tr>
+                {/each}
+                <tr>
+                  <th scope="row">Survival rate</th>
+                  {#each group.columns as column (column.id)}
+                    {#if loading(column, null)}
+                      <StatCell
+                        kind="winRate"
+                        label="Survival rate, {group.name.toLowerCase()}, {column.spoken}"
+                        rated={false}
+                        pending
+                      />
+                    {:else}
+                      <td class="num plain">{formatWinRate(column.line?.survivalRate)}</td>
+                    {/if}
+                  {/each}
+                </tr>
+              </tbody>
+            </table>
+          {/each}
+          {#if stats.shipState === "unavailable"}
+            <p class="note">Wargaming did not return ship statistics for this player. Press Refresh to try again.</p>
+          {:else if stats.shipState === "ready" && stats.ship === null}
+            <p class="note">This player has no random battles in this ship yet.</p>
           {/if}
-        </section>
-      {:else if (stats.kind === "loaded" || stats.kind === "hidden") && region === null}
-        <p class="note">Profile links need the server region, which could not be detected.</p>
-      {/if}
-    </div>
-  {/if}
+          <p class="note">
+            Solo leaves out battles played in a division. Div 2 and Div 3 count only battles in a division of two or three
+            players. Personal rating uses expected values from wows-numbers.com.
+          </p>
+        {:else if stats.kind === "pending"}
+          <p class="state" aria-busy="true">Loading statistics from Wargaming.</p>
+        {:else if stats.kind === "bot"}
+          <p class="state">This is a bot. Bots have no statistics.</p>
+        {:else if stats.kind === "hidden"}
+          <p class="state with-icon">
+            <Icon name="eyeOff" />
+            This player has hidden their profile, so Wargaming shares no statistics for it.
+          </p>
+        {:else if stats.kind === "notFound"}
+          <p class="state">Wargaming has no account with this name on this server.</p>
+        {:else if stats.kind === "failed"}
+          <p class="state with-icon error">
+            <Icon name="error" />
+            <span>Statistics are unavailable: {stats.reason}</span>
+          </p>
+        {/if}
+
+        {#if links.length > 0}
+          <section class="links" aria-labelledby="{id}-links">
+            <h3 id="{id}-links">Profiles</h3>
+            <div class="link-row">
+              {#each links as link (link.id)}
+                <Button size="sm" onclick={() => follow(link.url)}>
+                  {link.label}
+                  <Icon name="external" size={14} />
+                  <span class="visually-hidden">(opens in your browser)</span>
+                </Button>
+              {/each}
+            </div>
+            {#if linkError}
+              <p class="link-error" role="alert">{linkError}</p>
+            {/if}
+          </section>
+        {:else if (stats.kind === "loaded" || stats.kind === "hidden") && region === null}
+          <p class="note">Profile links need the server region, which could not be detected.</p>
+        {/if}
+      </div>
+    {/if}
+  </div>
 </dialog>
 
 <style>
   .sheet {
     position: fixed;
-    inset: 0 0 0 auto;
-    width: min(100vw, calc(var(--space-6) * 13));
-    max-width: 100vw;
-    height: 100%;
-    max-height: 100%;
+    inset: var(--titlebar-height) 0 0 0;
+    z-index: 2;
+    width: auto;
+    height: auto;
     margin: 0;
     padding: 0;
     border: 0;
-    border-left: 1px solid var(--border-strong);
-    background: var(--surface-raised);
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
     color: var(--text);
-    box-shadow: var(--shadow-pop);
+    opacity: 0;
+    transition:
+      opacity var(--duration-base) var(--ease-out),
+      display var(--duration-base) allow-discrete;
   }
 
   .sheet[open] {
-    animation: slide-in var(--duration-base) var(--ease-out);
+    opacity: 1;
   }
 
-  .sheet::backdrop {
-    background: color-mix(in srgb, var(--bg) 50%, transparent);
+  .panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(100vw, 26rem);
+    overflow-y: auto;
+    border-left: 1px solid var(--border);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-pop);
+    translate: var(--space-5) 0;
+    transition: translate var(--duration-base) var(--ease-out);
   }
 
-  @keyframes slide-in {
-    from {
-      transform: translateX(var(--space-5));
+  .sheet[open] .panel {
+    translate: 0 0;
+  }
+
+  @starting-style {
+    .sheet[open] {
       opacity: 0;
     }
 
-    to {
-      transform: none;
-      opacity: 1;
+    .sheet[open] .panel {
+      translate: var(--space-5) 0;
     }
   }
 
   .body {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-5);
     min-height: 100%;
-    padding: var(--space-4);
+    padding: var(--space-5);
   }
 
   header {
@@ -268,45 +356,39 @@
   }
 
   .heading {
+    display: grid;
+    gap: var(--space-1);
     min-width: 0;
   }
 
   .relation {
     margin: 0;
     color: var(--text-muted);
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-
-  .relation.ally {
-    color: var(--ally);
-  }
-
-  .relation.enemy {
-    color: var(--enemy);
+    font-size: var(--fs-sm);
   }
 
   h2 {
-    margin: var(--space-1) 0 0;
+    margin: 0;
     font-family: var(--font-display);
     font-size: var(--fs-xl);
-    font-weight: 600;
+    font-weight: var(--weight-strong);
+    letter-spacing: var(--tracking-display);
     overflow-wrap: anywhere;
   }
 
   .clan {
-    color: var(--text-muted);
+    color: var(--text-faint);
+    font-weight: var(--weight-regular);
   }
 
   .ship {
-    margin: var(--space-1) 0 0;
+    margin: 0;
     color: var(--text-muted);
     font-size: var(--fs-md);
   }
 
-  .tier {
-    font-weight: 600;
+  .class-name {
+    margin-left: var(--space-1);
   }
 
   .lines {
@@ -314,19 +396,35 @@
     border-collapse: collapse;
   }
 
+  .lines caption {
+    padding-bottom: var(--space-2);
+    font-size: var(--fs-md);
+    text-align: left;
+  }
+
   .lines th {
-    padding: var(--space-1) var(--space-2);
+    padding: 0 var(--cell-pad);
     border-bottom: 1px solid var(--border);
     color: var(--text-muted);
     font-size: var(--fs-sm);
-    font-weight: 600;
+    font-weight: var(--weight-regular);
     text-align: left;
     white-space: nowrap;
   }
 
+  .lines th:first-child {
+    padding-left: 0;
+  }
+
   .lines thead th {
+    padding-bottom: var(--space-2);
+    border-bottom-color: var(--border-strong);
     font-size: var(--fs-xs);
     text-align: right;
+  }
+
+  .lines thead td {
+    border-bottom: 1px solid var(--border-strong);
   }
 
   .lines tr {
@@ -337,8 +435,12 @@
     font-size: var(--fs-md);
   }
 
+  .lines :global(td:last-child) {
+    padding-right: 0;
+  }
+
   .plain {
-    padding: 0 var(--space-2);
+    padding: 0 var(--cell-pad);
     border-bottom: 1px solid var(--border);
     text-align: right;
     white-space: nowrap;
@@ -352,9 +454,6 @@
 
   .state {
     margin: 0;
-    padding: var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
     color: var(--text-muted);
     font-size: var(--fs-md);
   }
@@ -365,9 +464,13 @@
     gap: var(--space-2);
   }
 
+  .with-icon :global(svg) {
+    flex: none;
+    margin-top: 0.125em;
+  }
+
   .error {
     color: var(--text);
-    border-color: var(--danger);
   }
 
   .error :global(svg) {
@@ -379,14 +482,15 @@
     flex-direction: column;
     gap: var(--space-2);
     margin-top: auto;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
   }
 
   h3 {
     margin: 0;
     color: var(--text-muted);
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    text-transform: uppercase;
+    font-size: var(--fs-sm);
+    font-weight: var(--weight-regular);
   }
 
   .link-row {

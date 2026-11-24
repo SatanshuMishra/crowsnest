@@ -30,8 +30,8 @@
 <style>
   .section {
     display: grid;
-    gap: var(--space-3);
-    padding: var(--space-5) 0;
+    gap: var(--space-4);
+    padding: var(--space-5) 0 var(--space-6);
     border-top: 1px solid var(--border);
   }
 
@@ -44,7 +44,7 @@
     margin: 0;
     font-family: var(--font-display);
     font-size: var(--fs-lg);
-    font-weight: 600;
+    font-weight: var(--weight-strong);
   }
 
   p {
@@ -55,6 +55,6 @@
 
   .body {
     display: grid;
-    gap: var(--space-2);
+    gap: var(--space-3);
   }
 </style>

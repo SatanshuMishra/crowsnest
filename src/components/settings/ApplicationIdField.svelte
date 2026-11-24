@@ -136,12 +136,10 @@
 
   .label {
     font-size: var(--fs-md);
-    font-weight: 600;
   }
 
   .optional {
     color: var(--text-muted);
-    font-weight: 400;
   }
 
   .description {
@@ -161,11 +159,11 @@
   .input {
     flex: 1 1 calc(var(--space-6) * 8);
     min-width: 0;
-    min-height: var(--target-min);
+    min-height: 32px;
     padding: var(--space-1) var(--space-2);
     border: 1px solid var(--text-faint);
     border-radius: var(--radius-sm);
-    background: var(--bg);
+    background: transparent;
     color: var(--text);
     font-family: var(--font-mono);
     font-size: var(--fs-md);

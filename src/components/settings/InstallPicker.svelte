@@ -281,17 +281,13 @@
   .details,
   .empty {
     margin: 0;
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    background: var(--surface);
   }
 
   .details {
     display: grid;
     grid-template-columns: max-content minmax(0, 1fr);
     align-items: baseline;
-    gap: var(--space-2) var(--space-4);
+    gap: var(--space-2) var(--space-5);
     font-size: var(--fs-md);
   }
 
@@ -325,8 +321,13 @@
   .empty {
     display: flex;
     align-items: flex-start;
-    gap: var(--space-3);
+    gap: var(--space-2);
     color: var(--text-muted);
+  }
+
+  .empty :global(svg) {
+    flex: none;
+    color: var(--text-faint);
   }
 
   .empty p {
@@ -337,7 +338,6 @@
   .empty .empty-title {
     color: var(--text);
     font-size: var(--fs-md);
-    font-weight: 600;
   }
 
   .actions {
@@ -351,15 +351,17 @@
     display: grid;
     gap: var(--space-1);
     margin: 0;
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
+    padding: var(--space-3) 0 0;
+    border: 0;
+    border-top: 1px solid var(--border);
   }
 
   legend {
-    padding: 0 var(--space-1);
+    float: left;
+    width: 100%;
+    margin-bottom: var(--space-2);
+    padding: 0;
     font-size: var(--fs-md);
-    font-weight: 600;
   }
 
   .candidate {
@@ -379,7 +381,7 @@
   .candidate input {
     flex: none;
     margin: var(--space-1) 0 0;
-    accent-color: var(--accent);
+    accent-color: var(--text);
   }
 
   .candidate-text {
@@ -437,6 +439,5 @@
 
   .label {
     font-size: var(--fs-md);
-    font-weight: 600;
   }
 </style>

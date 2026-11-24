@@ -69,8 +69,12 @@ export type PlayerStats =
       accountId: number;
       overall: StatLine;
       overallSolo: StatLine | null;
+      overallDiv2: StatLine | null;
+      overallDiv3: StatLine | null;
       ship: StatLine | null;
       shipSolo: StatLine | null;
+      shipDiv2: StatLine | null;
+      shipDiv3: StatLine | null;
       shipState: ShipStatsState;
       createdAt: number | null;
     };
@@ -121,6 +125,7 @@ export interface Notice {
 
 export interface Snapshot {
   phase: Phase;
+  connected: boolean;
   install: GameInstall | null;
   battle: Battle | null;
   notice: Notice | null;

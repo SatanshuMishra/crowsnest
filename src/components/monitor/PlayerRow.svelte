@@ -1,7 +1,6 @@
 <script lang="ts">
-  import Icon from "../ui/Icon.svelte";
   import StatCell from "./StatCell.svelte";
-  import { romanNumeral, shipClassBadge } from "../../lib/format";
+  import { divisionLetter, romanNumeral, shipClassBadge } from "../../lib/format";
   import { columnValue, playerLines, type ColumnGroups } from "../../lib/team";
   import { highlightTier, statTier, tierColor } from "../../lib/tiers";
   import type { Player, Settings } from "../../lib/types";
@@ -24,6 +23,7 @@
   const allColumns = $derived([...columns.ship, ...columns.account]);
   const suffix = $derived(settings.soloStats ? ", solo" : "");
   const isMe = $derived(player.relation === "me");
+  const division = $derived(player.division === null ? null : divisionLetter(player.division));
   const badge = $derived(player.ship ? shipClassBadge(player.ship.class) : null);
   const highlight = $derived(
     settings.highlight !== "none" && lines ? highlightTier(settings.highlightStat, lines, player.expected) : null,
@@ -61,6 +61,10 @@
         <span class="clan">[{player.clanTag}]</span>
       {/if}
       <span class="name">{player.name}</span>
+      {#if division}
+        <span class="division" title="Division {division}" aria-hidden="true">({division})</span>
+        <span class="visually-hidden">, division {division}</span>
+      {/if}
       {#if isMe}
         <span class="visually-hidden">(You)</span>
       {/if}
@@ -87,9 +91,7 @@
   {:else if stats.kind === "bot"}
     <td class="message" colspan={statCount}>Bot</td>
   {:else if stats.kind === "hidden"}
-    <td class="message" colspan={statCount}>
-      <span class="message-line"><Icon name="eyeOff" size={14} />Hidden profile</span>
-    </td>
+    <td class="message" colspan={statCount}>Hidden profile</td>
   {:else if stats.kind === "notFound"}
     <td class="message" colspan={statCount}>Not found on Wargaming</td>
   {:else if stats.kind === "failed"}
@@ -114,7 +116,7 @@
       {/each}
     {:else if stats.kind === "loaded" && stats.shipState === "unavailable"}
       <td class="message" colspan={columns.ship.length} title="Wargaming did not return ship statistics. Press Refresh to try again.">
-        <span class="message-line"><Icon name="warning" size={14} />Ship stats unavailable</span>
+        Ship stats unavailable
       </td>
     {:else}
       <td class="message" colspan={columns.ship.length}>No battles in this ship</td>
@@ -142,6 +144,10 @@
     transition: background-color var(--duration-fast) var(--ease-out);
   }
 
+  .me > :global(*) {
+    background-color: var(--me-fill);
+  }
+
   tr:hover > :global(*) {
     background-color: var(--surface-hover);
   }
@@ -151,14 +157,10 @@
     outline-offset: -2px;
   }
 
-  .me {
-    outline: 2px solid var(--me);
-    outline-offset: -2px;
+  .me .name {
+    font-weight: var(--weight-strong);
   }
 
-  .me .name {
-    font-weight: 700;
-  }
 
   .fill > :global(*) {
     background-image: linear-gradient(
@@ -167,35 +169,50 @@
     );
   }
 
-  .edge .player {
-    box-shadow: inset 3px 0 0 var(--row-tier);
+  .player {
+    position: relative;
+  }
+
+  .edge .player::before {
+    position: absolute;
+    top: 50%;
+    left: calc(-1 * (var(--space-2) + var(--pip-size) - var(--cell-pad)));
+    width: var(--pip-size);
+    height: var(--pip-size);
+    border-radius: 1px;
+    background: var(--row-tier);
+    content: "";
+    translate: 0 -50%;
   }
 
   th,
   td {
-    padding: 0 var(--space-2);
+    padding: 0 var(--cell-pad);
     border-bottom: 1px solid var(--border);
     font-size: var(--fs-md);
-    font-weight: 400;
+    font-weight: var(--weight-regular);
     text-align: left;
     white-space: nowrap;
   }
 
   .player,
   .ship {
-    width: 50%;
     max-width: 0;
     min-width: calc(var(--space-6) * 3);
   }
 
   .player {
-    padding-left: var(--space-3);
+    width: 53%;
+  }
+
+  .ship {
+    width: 47%;
   }
 
   .clip {
     display: flex;
     align-items: baseline;
-    gap: var(--space-1);
+    gap: var(--cell-pad);
     min-width: 0;
     overflow: hidden;
   }
@@ -213,38 +230,32 @@
   }
 
   .clan {
-    color: var(--text-muted);
+    color: var(--text-faint);
+    font-size: var(--fs-xs);
+  }
+
+  .division {
+    color: var(--division);
   }
 
   .class-badge {
-    padding: 0 var(--space-1);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    color: var(--text-muted);
-    font-family: var(--font-mono);
+    order: 1;
+    color: var(--text-faint);
     font-size: var(--fs-xs);
-    line-height: 1.4;
   }
 
   .tier {
+    min-width: 1.3em;
     color: var(--text-muted);
-    font-size: var(--fs-sm);
-    font-weight: 600;
+    text-align: right;
   }
 
   .unknown {
-    color: var(--text-muted);
-    font-style: italic;
+    color: var(--text-faint);
   }
 
   .message {
-    color: var(--text-muted);
+    color: var(--text-faint);
     font-size: var(--fs-sm);
-  }
-
-  .message-line {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
   }
 </style>

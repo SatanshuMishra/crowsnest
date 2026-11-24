@@ -6,19 +6,40 @@
     icon: IconName;
     label: string;
     pressed?: boolean;
+    busy?: boolean;
   }
 
-  let { icon, label, pressed, disabled = false, type = "button", ...rest }: Props = $props();
+  let { icon, label, pressed, busy = false, disabled = false, type = "button", ...rest }: Props = $props();
+
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let spinning = $state(false);
+
+  $effect(() => {
+    if (busy) {
+      spinning = true;
+    } else if (reducedMotion.matches) {
+      spinning = false;
+    }
+  });
+
+  function finishTurn() {
+    if (!busy) {
+      spinning = false;
+    }
+  }
 </script>
 
 <button
   {...rest}
   {type}
   class="icon-button"
+  class:busy={spinning}
   aria-label={label}
   title={label}
   aria-pressed={pressed}
+  aria-busy={busy || undefined}
   {disabled}
+  onanimationiteration={finishTurn}
 >
   <Icon name={icon} size={18} />
 </button>
@@ -37,17 +58,46 @@
     cursor: pointer;
     transition:
       background var(--duration-fast) var(--ease-out),
-      color var(--duration-fast) var(--ease-out);
+      color var(--duration-fast) var(--ease-out),
+      scale var(--duration-fast) var(--ease-out);
   }
 
-  .icon-button:hover:not(:disabled),
+  .icon-button:hover:not(:disabled, [aria-disabled="true"]),
   .icon-button[aria-pressed="true"] {
     background: var(--surface-hover);
     color: var(--text);
   }
 
-  .icon-button:disabled {
+  .icon-button:active:not(:disabled, [aria-disabled="true"]) {
+    scale: 0.92;
+  }
+
+  .icon-button:disabled,
+  .icon-button[aria-disabled="true"] {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+
+  .busy,
+  .busy[aria-disabled="true"] {
+    opacity: 1;
+    color: var(--text);
+    cursor: progress;
+  }
+
+  .busy :global(svg) {
+    animation: spin 0.9s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      rotate: 1turn;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .busy :global(svg) {
+      animation: none;
+    }
   }
 </style>

@@ -171,6 +171,10 @@ const REGIONS: Record<Region, { short: string; name: string }> = {
   asia: { short: "Asia", name: "Asia" },
 };
 
+export function divisionLetter(division: number): string {
+  return String.fromCharCode("A".charCodeAt(0) + division - 1);
+}
+
 export function regionLabel(region: Region): string {
   return REGIONS[region].short;
 }

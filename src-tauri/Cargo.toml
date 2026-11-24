@@ -36,6 +36,8 @@ notify-debouncer-full = "0.8"
 roxmltree = "0.21"
 regex = "1"
 futures = "0.3"
+wows_replays = "=0.46.0"
+wowsunpack = { version = "=0.45.0", default-features = false, features = ["vfs-mmap"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
@@ -43,10 +45,11 @@ winreg = "0.56"
 [dev-dependencies]
 http = "1"
 tempfile = "3"
+pickled = "=2.0.0-alpha9"
 
 [profile.release]
 codegen-units = 1
 lto = true
 opt-level = "s"
-panic = "abort"
+panic = "unwind"
 strip = true

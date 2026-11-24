@@ -196,13 +196,13 @@
         />
         <Toggle
           label="Coloured values"
-          description="Colour each statistic by its tier. The tier name stays available either way."
+          description="Colour win rates and personal rating by their tier. Every tier name stays in the tooltip either way."
           checked={settings.coloredValues}
           onchange={(coloredValues) => app.update({ coloredValues })}
         />
         <Segmented
           label="Row highlight"
-          description="Mark each row with a coloured left edge or a tinted fill."
+          description="Mark each player with a small tier-coloured square at the edge, or tint the whole row."
           value={settings.highlight}
           options={highlightChoices}
           onchange={(highlight) => app.update({ highlight })}
@@ -338,15 +338,16 @@
 
 <style>
   .settings {
+    position: relative;
     height: 100%;
     overflow-y: auto;
-    padding: var(--space-4) var(--space-4) var(--space-6);
+    padding: var(--space-5) var(--space-5) var(--space-6);
   }
 
   .column {
     display: grid;
     width: 100%;
-    max-width: calc(var(--space-6) * 22.5);
+    max-width: calc(var(--space-6) * 20);
     margin: 0 auto;
   }
 
@@ -354,14 +355,16 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    padding-bottom: var(--space-3);
+    margin-left: calc(-1 * var(--space-2));
+    padding-bottom: var(--space-4);
   }
 
   h1 {
     margin: 0;
     font-family: var(--font-display);
     font-size: var(--fs-xl);
-    font-weight: 600;
+    font-weight: var(--weight-strong);
+    letter-spacing: var(--tracking-display);
   }
 
   .save-error {
@@ -369,9 +372,6 @@
     align-items: flex-start;
     gap: var(--space-2);
     margin: 0 0 var(--space-4);
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--danger);
-    border-radius: var(--radius-md);
     color: var(--danger);
     font-size: var(--fs-md);
   }
@@ -383,19 +383,20 @@
   }
 
   a {
-    color: var(--accent);
-    font-weight: 600;
+    color: var(--text);
     text-decoration: underline;
+    text-decoration-color: var(--text-faint);
+    text-underline-offset: 0.2em;
   }
 
   a:hover {
-    color: var(--accent-strong);
+    text-decoration-color: currentColor;
   }
 
   .explanations {
     display: grid;
     gap: var(--space-1);
-    margin: 0;
+    margin: calc(-1 * var(--space-2)) 0 0;
     color: var(--text-muted);
     font-size: var(--fs-sm);
   }
@@ -407,7 +408,6 @@
 
   .explanations dt {
     color: var(--text);
-    font-weight: 600;
   }
 
   .explanations dd {
@@ -427,11 +427,11 @@
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
+    font-size: var(--fs-md);
   }
 
   .label {
     font-size: var(--fs-md);
-    font-weight: 600;
   }
 
   .feedback:empty {
@@ -440,11 +440,7 @@
 
   .offer {
     display: grid;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    background: var(--surface);
+    gap: var(--space-3);
   }
 
   .message {
@@ -453,6 +449,11 @@
     gap: var(--space-2);
     margin: 0;
     font-size: var(--fs-md);
+  }
+
+  .message :global(svg) {
+    flex: none;
+    margin-top: 0.125em;
   }
 
   .muted {
@@ -472,7 +473,6 @@
     line-height: var(--target-min);
     color: var(--text-muted);
     font-size: var(--fs-sm);
-    font-weight: 600;
     cursor: pointer;
   }
 
@@ -500,9 +500,8 @@
   .bar {
     position: relative;
     flex: 1 1 auto;
-    height: var(--space-2);
+    height: 2px;
     overflow: hidden;
-    border-radius: var(--radius-sm);
     background: var(--border-strong);
   }
 
@@ -510,7 +509,7 @@
     position: absolute;
     inset: 0 auto 0 0;
     width: 0;
-    background: var(--accent);
+    background: var(--text);
     transition: width var(--duration-base) var(--ease-out);
   }
 

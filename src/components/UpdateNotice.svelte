@@ -92,19 +92,12 @@
   .pill {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: var(--space-3);
     min-height: var(--target-min);
-    padding: 0 var(--space-1) 0 var(--space-3);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    color: var(--text);
+    margin-right: var(--space-2);
+    color: var(--text-muted);
     font-size: var(--fs-sm);
     white-space: nowrap;
-  }
-
-  .pill.trailing-text {
-    padding-right: var(--space-3);
   }
 
   .text {
@@ -120,9 +113,8 @@
   .bar {
     position: relative;
     width: calc(var(--space-6) * 3);
-    height: var(--space-2);
+    height: 2px;
     overflow: hidden;
-    border-radius: var(--radius-sm);
     background: var(--border-strong);
   }
 
@@ -130,7 +122,7 @@
     position: absolute;
     inset: 0 auto 0 0;
     width: 0;
-    background: var(--accent);
+    background: var(--text);
     transition: width var(--duration-base) var(--ease-out);
   }
 

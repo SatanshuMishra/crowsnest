@@ -29,6 +29,12 @@ const TOTALS_FIELDS: [&str; 6] = [
     "frags",
     "xp",
 ];
+const ACCOUNT_SPLITS: [&str; 3] = [
+    "statistics.pvp_solo",
+    "statistics.pvp_div2",
+    "statistics.pvp_div3",
+];
+const SHIP_SPLITS: [&str; 3] = ["pvp_solo", "pvp_div2", "pvp_div3"];
 const SHIP_FIELDS: &str = "ship_id,name,tier,type,nation,is_premium,is_special";
 
 #[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
@@ -54,6 +60,8 @@ pub struct AccountRecord {
     pub created_at: Option<i64>,
     pub pvp: Option<Totals>,
     pub pvp_solo: Option<Totals>,
+    pub pvp_div2: Option<Totals>,
+    pub pvp_div3: Option<Totals>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,6 +69,8 @@ pub struct ShipRecord {
     pub ship_id: u64,
     pub pvp: Totals,
     pub pvp_solo: Option<Totals>,
+    pub pvp_div2: Option<Totals>,
+    pub pvp_div3: Option<Totals>,
 }
 
 #[derive(Clone)]
@@ -340,7 +350,7 @@ fn account_info_requests(ids: &[u64]) -> Vec<ApiRequest> {
                 vec![
                     ("account_id", joined(chunk)),
                     ("fields", account_info_fields()),
-                    ("extra", "statistics.pvp_solo".to_owned()),
+                    ("extra", ACCOUNT_SPLITS.join(",")),
                 ],
             )
         })
@@ -354,7 +364,7 @@ fn ship_stats_request(account_id: u64) -> ApiRequest {
         vec![
             ("account_id", account_id.to_string()),
             ("fields", ship_stats_fields()),
-            ("extra", "pvp_solo".to_owned()),
+            ("extra", SHIP_SPLITS.join(",")),
         ],
     )
 }
@@ -398,7 +408,7 @@ fn account_info_fields() -> String {
         .into_iter()
         .map(str::to_owned)
         .chain(totals_fields("statistics.pvp"))
-        .chain(totals_fields("statistics.pvp_solo"))
+        .chain(ACCOUNT_SPLITS.into_iter().flat_map(totals_fields))
         .collect::<Vec<_>>()
         .join(",")
 }
@@ -406,7 +416,7 @@ fn account_info_fields() -> String {
 fn ship_stats_fields() -> String {
     iter::once("ship_id".to_owned())
         .chain(totals_fields("pvp"))
-        .chain(totals_fields("pvp_solo"))
+        .chain(SHIP_SPLITS.into_iter().flat_map(totals_fields))
         .collect::<Vec<_>>()
         .join(",")
 }
@@ -518,10 +528,12 @@ struct RawAccount {
     statistics: Option<RawAccountStatistics>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct RawAccountStatistics {
     pvp: Option<RawTotals>,
     pvp_solo: Option<RawTotals>,
+    pvp_div2: Option<RawTotals>,
+    pvp_div3: Option<RawTotals>,
 }
 
 #[derive(Deserialize)]
@@ -529,6 +541,8 @@ struct RawShipStats {
     ship_id: u64,
     pvp: Option<RawTotals>,
     pvp_solo: Option<RawTotals>,
+    pvp_div2: Option<RawTotals>,
+    pvp_div3: Option<RawTotals>,
 }
 
 #[derive(Deserialize)]
@@ -582,18 +596,15 @@ fn parse_accounts(payload: Payload) -> Result<HashMap<u64, AccountRecord>, WgErr
 }
 
 fn account_record(account_id: u64, raw: RawAccount, listed_hidden: bool) -> AccountRecord {
-    let (pvp, pvp_solo) = raw.statistics.map_or((None, None), |statistics| {
-        (
-            statistics.pvp.map(Totals::from),
-            statistics.pvp_solo.map(Totals::from),
-        )
-    });
+    let statistics = raw.statistics.unwrap_or_default();
     AccountRecord {
         account_id,
         hidden: raw.hidden_profile.unwrap_or_default() || listed_hidden,
         created_at: raw.created_at,
-        pvp,
-        pvp_solo,
+        pvp: statistics.pvp.map(Totals::from),
+        pvp_solo: statistics.pvp_solo.map(Totals::from),
+        pvp_div2: statistics.pvp_div2.map(Totals::from),
+        pvp_div3: statistics.pvp_div3.map(Totals::from),
     }
 }
 
@@ -618,6 +629,8 @@ fn ship_record(raw: RawShipStats) -> ShipRecord {
         ship_id: raw.ship_id,
         pvp: raw.pvp.map(Totals::from).unwrap_or_default(),
         pvp_solo: raw.pvp_solo.map(Totals::from),
+        pvp_div2: raw.pvp_div2.map(Totals::from),
+        pvp_div3: raw.pvp_div3.map(Totals::from),
     }
 }
 
@@ -841,6 +854,8 @@ mod tests {
                 created_at: Some(1_420_070_400),
                 pvp: Some(totals(4210, 2315, 1580, 194_502_300, 4630, 5_262_500)),
                 pvp_solo: Some(totals(3100, 1674, 1120, 140_120_400, 3350, 3_844_000)),
+                pvp_div2: Some(totals(800, 462, 330, 39_200_000, 920, 1_020_000)),
+                pvp_div3: Some(totals(310, 179, 130, 15_181_900, 360, 398_500)),
             }
         );
         assert_eq!(
@@ -851,6 +866,8 @@ mod tests {
                 created_at: Some(1_451_606_400),
                 pvp: None,
                 pvp_solo: None,
+                pvp_div2: None,
+                pvp_div3: None,
             }
         );
         assert_eq!(
@@ -858,11 +875,13 @@ mod tests {
             Some(totals(12, 5, 3, 301_200, 6, 9800))
         );
         assert_eq!(accounts[&500_100_003].pvp_solo, None);
+        assert_eq!(accounts[&500_100_003].pvp_div2, None);
+        assert_eq!(accounts[&500_100_003].pvp_div3, None);
         assert!(!accounts.contains_key(&500_100_004));
     }
 
     #[test]
-    fn ship_stats_map_every_ship_with_optional_solo_totals() {
+    fn ship_stats_map_every_ship_with_optional_solo_and_division_totals() {
         let records = parse_ship_stats(payload(SHIPS_STATS), 500_100_001).expect("ship stats");
         assert_eq!(records.len(), 3);
         assert_eq!(
@@ -871,10 +890,14 @@ mod tests {
                 ship_id: 4_181_604_176,
                 pvp: totals(310, 182, 121, 30_380_000, 372, 527_000),
                 pvp_solo: Some(totals(240, 137, 90, 23_280_000, 281, 400_800)),
+                pvp_div2: Some(totals(50, 32, 22, 5_100_000, 65, 90_000)),
+                pvp_div3: Some(totals(20, 13, 9, 2_000_000, 26, 36_200)),
             }
         );
         assert_eq!(records[1].pvp_solo, None);
         assert_eq!(records[2].pvp_solo, None);
+        assert_eq!(records[1].pvp_div2, None);
+        assert_eq!(records[2].pvp_div3, None);
         assert_eq!(records[2].pvp, totals(7, 4, 2, 361_000, 5, 8400));
     }
 
@@ -999,13 +1022,18 @@ mod tests {
                 .collect();
             assert_eq!(batch_sizes, vec![100, 100, 30]);
         }
-        assert_eq!(param(&info[0], "extra"), Some("statistics.pvp_solo"));
+        assert_eq!(
+            param(&info[0], "extra"),
+            Some("statistics.pvp_solo,statistics.pvp_div2,statistics.pvp_div3")
+        );
         let fields: Vec<&str> =
             param(&info[0], "fields").map_or(Vec::new(), |fields| fields.split(',').collect());
         assert!(fields.contains(&"hidden_profile"));
         assert!(fields.contains(&"statistics.pvp.survived_battles"));
         assert!(fields.contains(&"statistics.pvp_solo.damage_dealt"));
-        assert_eq!(fields.len(), 15);
+        assert!(fields.contains(&"statistics.pvp_div2.wins"));
+        assert!(fields.contains(&"statistics.pvp_div3.xp"));
+        assert_eq!(fields.len(), 27);
         assert_eq!(param(&clans[0], "extra"), Some("clan"));
         let url = request_url(Region::Asia, APPLICATION_ID, &clans[0]).expect("url");
         assert_eq!(url.host_str(), Some("api.worldofwarships.asia"));
@@ -1027,10 +1055,12 @@ mod tests {
         assert_eq!(url.path(), "/wows/ships/stats/");
         let pairs = query(&url);
         assert_eq!(pairs["account_id"], "500100001");
-        assert_eq!(pairs["extra"], "pvp_solo");
+        assert_eq!(pairs["extra"], "pvp_solo,pvp_div2,pvp_div3");
         assert!(!pairs.contains_key("ship_id"));
         assert!(pairs["fields"].starts_with("ship_id,pvp.battles"));
         assert!(pairs["fields"].contains("pvp_solo.xp"));
+        assert!(pairs["fields"].contains("pvp_div2.frags"));
+        assert!(pairs["fields"].contains("pvp_div3.xp"));
     }
 
     #[test]

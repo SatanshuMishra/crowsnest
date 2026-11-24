@@ -69,13 +69,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-4);
+    gap: var(--space-5);
     min-height: 40px;
   }
 
   .label {
     font-size: var(--fs-md);
-    font-weight: 600;
   }
 
   p {
@@ -87,28 +86,43 @@
   .segmented {
     display: inline-flex;
     flex: none;
-    padding: 2px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
-    background: var(--bg);
   }
 
   button {
     min-height: var(--target-min);
     padding: 0 var(--space-3);
     border: 0;
-    border-radius: 3px;
+    border-radius: 0;
     background: transparent;
     color: var(--text-muted);
     font-size: var(--fs-sm);
-    font-weight: 600;
     cursor: pointer;
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+
+  button + button {
+    border-left: 1px solid var(--border);
+  }
+
+  button:first-child {
+    border-radius: calc(var(--radius-sm) - 1px) 0 0 calc(var(--radius-sm) - 1px);
+  }
+
+  button:last-child {
+    border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0;
+  }
+
+  button:hover:not(:disabled) {
+    color: var(--text);
   }
 
   button[aria-checked="true"] {
-    background: var(--surface-raised);
-    color: var(--text);
-    box-shadow: inset 0 0 0 1px var(--border-strong);
+    background: var(--accent);
+    color: var(--accent-contrast);
   }
 
   button:disabled {

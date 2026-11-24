@@ -17,7 +17,7 @@ When a battle loads, Crowsnest shows every player on both teams with their ship,
 - Colour tiers in three palettes, Muted, Vibrant and Colour-blind friendly, that meet contrast guidelines in dark and light themes, with the tier name always available in text.
 - Team averages as mean, weighted, or median.
 - Compact and comfortable densities, three text sizes, tray mode, and a title-bar pin for always on top.
-- A short onboarding on first launch and after updates, with an appearance walkthrough, and live previews of each appearance option in Settings.
+- A short What's new card for each release, an appearance walkthrough with a live preview, and live previews of each appearance option in Settings.
 - Signed automatic updates from GitHub Releases.
 
 ## Privacy

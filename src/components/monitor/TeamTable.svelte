@@ -87,7 +87,7 @@
 
   thead {
     position: sticky;
-    top: 0;
+    top: calc(var(--scroll-inset-top, 0px) * -1);
     z-index: 1;
     background: var(--bg);
   }

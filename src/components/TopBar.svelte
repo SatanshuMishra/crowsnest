@@ -3,6 +3,7 @@
 </script>
 
 <script lang="ts">
+  import PinButton from "./PinButton.svelte";
   import UpdateNotice from "./UpdateNotice.svelte";
   import WindowControls from "./WindowControls.svelte";
   import IconButton from "./ui/IconButton.svelte";
@@ -10,8 +11,17 @@
   import { connectionStatus } from "../lib/connection";
   import { focusViewHeading } from "../lib/focus";
   import { matchType, regionLabel, regionName } from "../lib/format";
-  import { REFRESH_MIN_SPIN_MS, canRefresh, cooldownSeconds, refreshLabel } from "../lib/refresh";
+  import {
+    REFRESH_MIN_SPIN_MS,
+    canRefresh,
+    cooldownSeconds,
+    followRefresh,
+    refreshLabel,
+    refreshToast,
+    type RefreshWatch,
+  } from "../lib/refresh";
   import { app } from "../lib/state.svelte";
+  import { toasts } from "../lib/toast.svelte";
   import type { Snapshot } from "../lib/types";
   import { windowDrag } from "../lib/window";
 
@@ -25,7 +35,7 @@
   const CLOCK_TICK_MS = 250;
 
   let refreshing = $state(false);
-  let refreshError = $state<string | null>(null);
+  let refreshWatch: RefreshWatch | null = null;
   let lastRefreshAt = $state<number | null>(null);
   let now = $state(performance.now());
 
@@ -59,6 +69,26 @@
     return () => clearInterval(timer);
   });
 
+  $effect(() => {
+    const current = snapshot;
+    if (refreshWatch === null || !current) {
+      return;
+    }
+    const progress = followRefresh(refreshWatch, current);
+    if (progress.kind === "watching") {
+      refreshWatch = progress.watch;
+      return;
+    }
+    refreshWatch = null;
+    if (progress.kind === "finished" && current.battle) {
+      const toast = refreshToast(current.notice, [current.battle.allies, current.battle.enemies], () => void refresh());
+      if (toast.tone === "error") {
+        lastRefreshAt = null;
+      }
+      toasts.show(toast);
+    }
+  });
+
   function pause(milliseconds: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, Math.max(milliseconds, 0)));
   }
@@ -69,14 +99,20 @@
     }
     const startedAt = performance.now();
     refreshing = true;
-    refreshError = null;
+    refreshWatch = battle ? { battleId: battle.id, started: false } : null;
     lastRefreshAt = startedAt;
     now = startedAt;
     try {
       await backend.refresh();
     } catch (error) {
-      refreshError = String(error);
+      refreshWatch = null;
       lastRefreshAt = null;
+      toasts.show({
+        tone: "error",
+        title: "Refresh failed",
+        body: String(error),
+        action: { label: "Try again", run: () => void refresh() },
+      });
     } finally {
       await pause(REFRESH_MIN_SPIN_MS - (performance.now() - startedAt));
       refreshing = false;
@@ -132,11 +168,8 @@
   {/if}
 
   {#if snapshot && titled}
-    <div class="actions">
+    <div class="actions" inert={app.setup !== null}>
       <UpdateNotice />
-      {#if refreshError}
-        <span class="refresh-error" role="alert" title={refreshError}>Refresh failed</span>
-      {/if}
       {#if availability.cooldown > 0 && !availability.busy}
         <span class="cooldown num" aria-hidden="true">{availability.cooldown}s</span>
       {/if}
@@ -152,6 +185,7 @@
     </div>
   {/if}
 
+  <PinButton />
   <WindowControls />
 </header>
 
@@ -284,10 +318,5 @@
     flex: none;
     align-items: center;
     gap: var(--space-1);
-  }
-
-  .refresh-error {
-    color: var(--danger);
-    font-size: var(--fs-sm);
   }
 </style>

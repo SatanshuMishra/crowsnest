@@ -88,6 +88,7 @@
     flex: 1;
     flex-direction: column;
     gap: var(--space-5);
+    position: relative;
     min-height: 0;
     padding: var(--space-5) var(--space-5) var(--space-4);
     overflow: auto;

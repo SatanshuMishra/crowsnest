@@ -336,6 +336,7 @@
 
 <style>
   .settings {
+    position: relative;
     height: 100%;
     overflow-y: auto;
     padding: var(--space-5) var(--space-5) var(--space-6);

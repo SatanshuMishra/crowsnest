@@ -70,6 +70,7 @@
     display: grid;
     justify-items: center;
     align-items: safe center;
+    position: relative;
     height: 100%;
     overflow-y: auto;
     padding: var(--space-6) var(--space-4);

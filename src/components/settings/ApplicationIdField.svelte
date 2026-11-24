@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { backend } from "../../lib/backend";
   import { app } from "../../lib/state.svelte";
   import type { Region } from "../../lib/types";
@@ -18,6 +19,7 @@
   const id = $props.id();
   let draft = $state(app.settings?.applicationId ?? "");
   let status = $state<Status>({ kind: "idle" });
+  let input = $state<HTMLInputElement>();
 
   const savedId = $derived(app.settings?.applicationId ?? null);
   const optional = $derived(app.info?.hasBundledApplicationId ?? false);
@@ -71,6 +73,8 @@
     } else {
       status = { kind: "failed", message: "Crowsnest could not clear the ID. Try again." };
     }
+    await tick();
+    input?.focus();
   }
 </script>
 
@@ -89,6 +93,7 @@
   </p>
   <div class="row">
     <input
+      bind:this={input}
       id="{id}-input"
       class="input"
       type="text"

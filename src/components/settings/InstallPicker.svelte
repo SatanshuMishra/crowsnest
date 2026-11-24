@@ -1,5 +1,6 @@
 <script lang="ts">
   import { open } from "@tauri-apps/plugin-dialog";
+  import { tick } from "svelte";
   import { backend } from "../../lib/backend";
   import { clientVersionLabel } from "../../lib/format";
   import { app } from "../../lib/state.svelte";
@@ -31,10 +32,17 @@
   let replaysError = $state<string | null>(null);
   let candidates = $state<GameInstall[]>([]);
   let selected = $state<string | null>(null);
+  let detectButton = $state<HTMLButtonElement>();
+  let chooseReplaysButton = $state<HTMLButtonElement>();
 
   const install = $derived(app.snapshot?.install ?? null);
   const replaysOverride = $derived(app.settings?.replaysDirOverride ?? null);
   const working = $derived(task !== null);
+
+  async function focusOnceSettled(target: HTMLElement | undefined) {
+    await tick();
+    target?.focus();
+  }
 
   async function pickFolder(title: string, defaultPath: string | undefined): Promise<string | null> {
     const path = await open({ directory: true, multiple: false, title, defaultPath });
@@ -77,10 +85,18 @@
       return;
     }
     task = "use";
-    if (await saveInstall(choice.root)) {
-      candidates = [];
-    }
+    const saved = await saveInstall(choice.root);
     task = null;
+    if (saved) {
+      candidates = [];
+      feedback = { tone: "info", text: "Crowsnest now uses this install." };
+      await focusOnceSettled(detectButton);
+    }
+  }
+
+  function cancelCandidates() {
+    candidates = [];
+    void focusOnceSettled(detectButton);
   }
 
   async function adopt(path: string) {
@@ -135,6 +151,7 @@
     task = "replays";
     await saveReplaysOverride(null);
     task = null;
+    await focusOnceSettled(chooseReplaysButton);
   }
 </script>
 
@@ -167,6 +184,7 @@
 
   <div class="actions">
     <Button
+      bind:element={detectButton}
       variant={install || candidates.length > 0 ? "secondary" : "primary"}
       busy={task === "detect"}
       disabled={working}
@@ -199,7 +217,7 @@
         <Button variant="primary" size="sm" busy={task === "use"} disabled={working} onclick={useSelected}>
           Use this install
         </Button>
-        <Button variant="ghost" size="sm" disabled={working} onclick={() => (candidates = [])}>Cancel</Button>
+        <Button variant="ghost" size="sm" disabled={working} onclick={cancelCandidates}>Cancel</Button>
       </div>
     </fieldset>
   {/if}
@@ -227,6 +245,7 @@
     </div>
     <div class="actions">
       <Button
+        bind:element={chooseReplaysButton}
         size="sm"
         aria-label="Choose replays folder"
         aria-describedby="{id}-replays-hint"

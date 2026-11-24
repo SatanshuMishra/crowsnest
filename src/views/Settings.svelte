@@ -73,6 +73,7 @@
   ];
 
   let linkError = $state<string | null>(null);
+  let offer = $state<HTMLDivElement>();
 
   const settings = $derived(app.settings);
   const update = $derived(updates.state);
@@ -91,6 +92,11 @@
       return `${download.percent}%`;
     }
     return download.received === 0 ? "Starting…" : "Size not known";
+  }
+
+  function install() {
+    offer?.focus();
+    void updates.installUpdate();
   }
 
   function chooseServer(choice: ServerChoice) {
@@ -266,61 +272,59 @@
           {/if}
         </div>
         <span class="visually-hidden" aria-live="polite">{updateNews}</span>
-        {#if update.status === "available"}
-          <div class="offer">
-            <p class="message">
-              <Icon name="download" />
-              <span>Version <span class="num">{update.version}</span> is available.</span>
-            </p>
-            {#if update.error}
-              <p class="message error"><Icon name="error" /><span>{update.error}</span></p>
-            {/if}
-            {#if update.notes}
-              <details class="notes">
-                <summary>What's new</summary>
-                <p>{update.notes}</p>
-              </details>
-            {/if}
-            <div class="actions">
-              <Button variant="primary" onclick={() => updates.installUpdate()}>
+        {#if update.status === "available" || update.status === "downloading" || update.status === "ready"}
+          <div bind:this={offer} class="offer" tabindex="-1" role="group" aria-label="Crowsnest update">
+            {#if update.status === "available"}
+              <p class="message">
                 <Icon name="download" />
-                {update.error ? "Try again" : `Install ${update.version}`}
-              </Button>
-            </div>
-          </div>
-        {:else if update.status === "downloading"}
-          <div class="offer">
-            <p class="message">
-              <Icon name="download" />
-              <span>Downloading version <span class="num">{update.version}</span>…</span>
-            </p>
-            <div class="progress">
-              <div
-                class="bar"
-                class:indeterminate={update.percent === null}
-                role="progressbar"
-                aria-label="Update download"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={update.percent ?? undefined}
-              >
-                <span class="fill" style:width={update.percent === null ? undefined : `${update.percent}%`}></span>
+                <span>Version <span class="num">{update.version}</span> is available.</span>
+              </p>
+              {#if update.error}
+                <p class="message error"><Icon name="error" /><span>{update.error}</span></p>
+              {/if}
+              {#if update.notes}
+                <details class="notes">
+                  <summary>What's new</summary>
+                  <p>{update.notes}</p>
+                </details>
+              {/if}
+              <div class="actions">
+                <Button variant="primary" onclick={install}>
+                  <Icon name="download" />
+                  {update.error ? "Try again" : `Install ${update.version}`}
+                </Button>
               </div>
-              <span class="num">{downloadLabel(update)}</span>
-            </div>
-          </div>
-        {:else if update.status === "ready"}
-          <div class="offer">
-            <p class="message success">
-              <Icon name="check" />
-              <span>Version <span class="num">{update.version}</span> is installed. Restart Crowsnest to use it.</span>
-            </p>
-            {#if update.error}
-              <p class="message error"><Icon name="error" /><span>{update.error}</span></p>
+            {:else if update.status === "downloading"}
+              <p class="message">
+                <Icon name="download" />
+                <span>Downloading version <span class="num">{update.version}</span>…</span>
+              </p>
+              <div class="progress">
+                <div
+                  class="bar"
+                  class:indeterminate={update.percent === null}
+                  role="progressbar"
+                  aria-label="Update download"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={update.percent ?? undefined}
+                >
+                  <span class="fill" style:width={update.percent === null ? undefined : `${update.percent}%`}></span>
+                </div>
+                <span class="num">{downloadLabel(update)}</span>
+              </div>
+            {:else if update.status === "ready"}
+              <p class="message success">
+                <Icon name="check" />
+                <span>Version <span class="num">{update.version}</span> is installed. Restart Crowsnest to use it.</span>
+              </p>
+              {#if update.error}
+                <p class="message error"><Icon name="error" /><span>{update.error}</span></p>
+              {/if}
+              <div class="actions">
+                <Button variant="primary" onclick={() => updates.restart()}>Restart to update</Button>
+              </div>
             {/if}
-            <div class="actions">
-              <Button variant="primary" onclick={() => updates.restart()}>Restart to update</Button>
-            </div>
           </div>
         {/if}
       </SettingsSection>

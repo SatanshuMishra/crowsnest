@@ -92,8 +92,16 @@
       </div>
     {:else if snapshot.phase === "waiting"}
       <div class="panel">
-        <h2 id="{id}-title">Waiting for a battle</h2>
-        <p>The player table appears here as soon as a battle loads.</p>
+        {#if snapshot.connected}
+          <h2 id="{id}-title">Waiting for a battle</h2>
+          <p>The player table appears here as soon as a battle loads.</p>
+        {:else}
+          <h2 id="{id}-title">Waiting for the replays folder</h2>
+          <p>
+            Crowsnest watches for battles once it can read this folder. The game creates it when your first battle
+            starts. If the game records replays somewhere else, choose that folder in Settings.
+          </p>
+        {/if}
         <dl class="paths">
           <div>
             <dt>Game folder</dt>

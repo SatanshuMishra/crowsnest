@@ -23,7 +23,7 @@ pub fn log_plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
 }
 
 pub fn persisted_window_state() -> StateFlags {
-    StateFlags::all() - StateFlags::VISIBLE
+    StateFlags::all() - StateFlags::VISIBLE - StateFlags::DECORATIONS
 }
 
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
@@ -82,5 +82,18 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
             api.prevent_close();
             let _ = window.hide();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_saved_window_never_brings_back_the_native_title_bar() {
+        let restored = persisted_window_state();
+        assert!(!restored.contains(StateFlags::DECORATIONS));
+        assert!(!restored.contains(StateFlags::VISIBLE));
+        assert!(restored.contains(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED));
     }
 }

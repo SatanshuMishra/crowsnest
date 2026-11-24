@@ -350,6 +350,7 @@ pub struct Notice {
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub phase: Phase,
+    pub connected: bool,
     pub install: Option<GameInstall>,
     pub battle: Option<Battle>,
     pub notice: Option<Notice>,
@@ -359,6 +360,7 @@ impl Snapshot {
     pub fn initial() -> Snapshot {
         Snapshot {
             phase: Phase::NeedsInstall,
+            connected: false,
             install: None,
             battle: None,
             notice: None,
@@ -369,6 +371,12 @@ impl Snapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_snapshot_reports_no_game_connection_on_the_wire() {
+        let wire = serde_json::to_value(Snapshot::initial()).unwrap();
+        assert_eq!(wire["connected"], serde_json::Value::Bool(false));
+    }
 
     #[test]
     fn player_stats_fields_are_camel_case_on_the_wire() {

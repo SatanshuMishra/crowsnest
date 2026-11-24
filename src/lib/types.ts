@@ -72,12 +72,19 @@ export type PlayerStats =
       createdAt: number | null;
     };
 
+export interface ExpectedStats {
+  damage: number;
+  frags: number;
+  winRate: number;
+}
+
 export interface Player {
   name: string;
   relation: Relation;
   clanTag: string | null;
   ship: Ship | null;
   shipId: number;
+  expected: ExpectedStats | null;
   division: number | null;
   stats: PlayerStats;
 }

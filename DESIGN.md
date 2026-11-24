@@ -31,6 +31,7 @@ All colour, spacing, type and motion values live as CSS custom properties in `sr
 - Statistic values: right-aligned tabular numbers. Coloured values tint win rate and personal rating only. Damage and frags stay plain because personal rating already scores them against expected values. The tier name is always the cell's title and accessible label, so colour is never the only cue.
 - Row highlight: Edge is a small tier-coloured square hanging in the gutter left of the name; Fill tints the row at `--highlight-fill-alpha`; None shows neither.
 - Ship cell: the tier numeral right-aligned in a fixed slot, the ship name, then the class abbreviation as faint text.
+- Player sheet: an Account table and a This ship table, each with All, Solo, Div 2 and Div 3 columns over the same rows, so division play reads against solo play. The ship table shows skeleton cells while ship statistics load and is left out when the player has none for this ship.
 - Your own row: `--me-fill` behind the row and your name at `--weight-strong`; the word "You" is there for assistive technology.
 - States: waiting, loading, setup, replays-off and error screens are plain left-aligned text in a `--measure` column, with no icon and no card. Loading uses skeleton cells of the final row height, not spinners.
 - Notices: one line above the tables, the icon in the tone colour, the text in body colour and a hairline below.

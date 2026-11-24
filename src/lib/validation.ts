@@ -62,3 +62,23 @@ export function describeVerifyFailure(error: unknown): VerifyFailure {
   const kind = verifyFailureKind(String(error).toLowerCase());
   return { kind, message: verifyFailureMessages[kind] };
 }
+
+export type InstallProblem = "missing" | "notAGameFolder" | "noBuild" | "unavailable";
+
+const installProblemMessages: Record<InstallProblem, string> = {
+  missing: "That folder no longer exists. Choose the game folder again.",
+  notAGameFolder:
+    "That folder holds no World of Warships files. Choose the folder that holds WorldOfWarships.exe and the bin folder.",
+  noBuild:
+    "The game files are there, but the bin folder holds no game build. This happens while the game updates: let the update finish, then try again.",
+  unavailable: "Crowsnest could not check that folder. Try again.",
+};
+
+function isInstallProblem(reason: string): reason is InstallProblem {
+  return Object.hasOwn(installProblemMessages, reason);
+}
+
+export function describeInstallProblem(error: unknown): string {
+  const reason = String(error);
+  return installProblemMessages[isInstallProblem(reason) ? reason : "unavailable"];
+}

@@ -4,6 +4,7 @@
   import { clientVersionLabel } from "../../lib/format";
   import { app } from "../../lib/state.svelte";
   import type { GameInstall, InstallSource } from "../../lib/types";
+  import { describeInstallProblem } from "../../lib/validation";
   import Button from "../ui/Button.svelte";
   import Icon from "../ui/Icon.svelte";
 
@@ -21,8 +22,6 @@
     manual: "Chosen by you",
   };
 
-  const NOT_AN_INSTALL =
-    "That folder is not a World of Warships install. Choose the folder that holds WorldOfWarships.exe and the bin folder.";
   const SAVE_FAILED = "Crowsnest could not save this folder. Try again.";
   const PICKER_FAILED = "The folder picker could not open. Try again.";
 
@@ -85,12 +84,12 @@
   }
 
   async function adopt(path: string) {
-    const isInstall = await backend.inspectInstall(path).then(
-      () => true,
-      () => false,
+    const problem = await backend.inspectInstall(path).then(
+      () => null,
+      (error: unknown) => describeInstallProblem(error),
     );
-    if (!isInstall) {
-      feedback = { tone: "error", text: NOT_AN_INSTALL };
+    if (problem) {
+      feedback = { tone: "error", text: problem };
       return;
     }
     candidates = [];

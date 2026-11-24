@@ -6,7 +6,7 @@
   import StatCell from "./StatCell.svelte";
   import { formatWinRate, romanNumeral, shipClassBadge, type StatKind } from "../../lib/format";
   import { playerLinks } from "../../lib/links";
-  import { lineValue } from "../../lib/team";
+  import { awaitsShipStats, lineValue, type StatScope } from "../../lib/team";
   import { statTier } from "../../lib/tiers";
   import type { ExpectedStats, Player, Region, Relation, Settings, StatLine } from "../../lib/types";
 
@@ -26,6 +26,7 @@
   interface LineColumn {
     id: string;
     name: string;
+    scope: StatScope;
     line: StatLine | null;
     expected: ExpectedStats | null;
   }
@@ -56,10 +57,10 @@
       return [];
     }
     return [
-      { id: "overall", name: "Overall", line: stats.overall, expected: null },
-      { id: "overall-solo", name: "Solo", line: stats.overallSolo, expected: null },
-      { id: "ship", name: "Ship", line: stats.ship, expected: player.expected },
-      { id: "ship-solo", name: "Ship solo", line: stats.shipSolo, expected: player.expected },
+      { id: "overall", name: "Overall", scope: "account", line: stats.overall, expected: null },
+      { id: "overall-solo", name: "Solo", scope: "account", line: stats.overallSolo, expected: null },
+      { id: "ship", name: "Ship", scope: "ship", line: stats.ship, expected: player.expected },
+      { id: "ship-solo", name: "Ship solo", scope: "ship", line: stats.shipSolo, expected: player.expected },
     ];
   });
 
@@ -96,6 +97,10 @@
 
   function rated(column: LineColumn, kind: StatKind): boolean {
     return ACCOUNT_RATED.has(kind) || (column.expected !== null && RATIO_RATED.has(kind));
+  }
+
+  function loading(column: LineColumn, kind: StatKind | null): boolean {
+    return stats !== null && awaitsShipStats(stats, column.scope, kind);
   }
 </script>
 
@@ -145,6 +150,7 @@
                     tier={statTier(row.kind, value, column.expected)}
                     rated={rated(column, row.kind)}
                     colored={settings.coloredValues}
+                    pending={loading(column, row.kind)}
                   />
                 {/each}
               </tr>
@@ -152,7 +158,11 @@
             <tr>
               <th scope="row">Survival rate</th>
               {#each lineColumns as column (column.id)}
-                <td class="num plain">{formatWinRate(column.line?.survivalRate)}</td>
+                {#if loading(column, null)}
+                  <StatCell kind="winRate" label="Survival rate, {column.name.toLowerCase()}" rated={false} pending />
+                {:else}
+                  <td class="num plain">{formatWinRate(column.line?.survivalRate)}</td>
+                {/if}
               {/each}
             </tr>
           </tbody>

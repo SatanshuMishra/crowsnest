@@ -1,0 +1,55 @@
+{
+  "status": "ok",
+  "meta": {
+    "count": 4,
+    "hidden": [500100002]
+  },
+  "data": {
+    "500100001": {
+      "account_id": 500100001,
+      "hidden_profile": false,
+      "created_at": 1420070400,
+      "statistics": {
+        "pvp": {
+          "battles": 4210,
+          "wins": 2315,
+          "survived_battles": 1580,
+          "damage_dealt": 194502300,
+          "frags": 4630,
+          "xp": 5262500
+        },
+        "pvp_solo": {
+          "battles": 3100,
+          "wins": 1674,
+          "survived_battles": 1120,
+          "damage_dealt": 140120400,
+          "frags": 3350,
+          "xp": 3844000
+        }
+      }
+    },
+    "500100002": {
+      "account_id": 500100002,
+      "hidden_profile": true,
+      "created_at": 1451606400,
+      "statistics": null
+    },
+    "500100003": {
+      "account_id": 500100003,
+      "hidden_profile": false,
+      "created_at": 1577836800,
+      "statistics": {
+        "pvp": {
+          "battles": 12,
+          "wins": 5,
+          "survived_battles": 3,
+          "damage_dealt": 301200,
+          "frags": 6,
+          "xp": 9800
+        },
+        "pvp_solo": null
+      }
+    },
+    "500100004": null
+  }
+}

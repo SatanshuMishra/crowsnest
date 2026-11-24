@@ -1,0 +1,57 @@
+{
+  "status": "ok",
+  "meta": {
+    "count": 5,
+    "page_total": 3,
+    "total": 205,
+    "limit": 100,
+    "page": 1
+  },
+  "data": {
+    "4181604176": {
+      "ship_id": 4181604176,
+      "name": "Kestrel",
+      "tier": 10,
+      "type": "Destroyer",
+      "nation": "usa",
+      "is_premium": false,
+      "is_special": false
+    },
+    "3751704560": {
+      "ship_id": 3751704560,
+      "name": "Bastion",
+      "tier": 8,
+      "type": "Battleship",
+      "nation": "uk",
+      "is_premium": true,
+      "is_special": false
+    },
+    "4074649552": {
+      "ship_id": 4074649552,
+      "name": "Albatross",
+      "tier": 11,
+      "type": "AirCarrier",
+      "nation": "japan",
+      "is_premium": false,
+      "is_special": true
+    },
+    "3762206416": {
+      "ship_id": 3762206416,
+      "name": "Narwhal",
+      "tier": 6,
+      "type": "Submarine",
+      "nation": "germany",
+      "is_premium": false,
+      "is_special": false
+    },
+    "3340678960": {
+      "ship_id": 3340678960,
+      "name": "Lantern",
+      "tier": 1,
+      "type": "Auxiliary",
+      "nation": "commonwealth",
+      "is_premium": false,
+      "is_special": false
+    }
+  }
+}

@@ -11,7 +11,7 @@ use crate::arena::watch::{ArenaEvent, ArenaWatcher};
 use crate::game::install;
 use crate::model::{
     ArenaInfo, ArenaVehicle, Battle, GameInstall, InstallSource, Notice, NoticeLevel, Phase,
-    Player, PlayerStats, Region, Snapshot, StatLine, Team, Totals,
+    Player, PlayerStats, Region, ShipStatsState, Snapshot, StatLine, Team, Totals,
 };
 use crate::rating::expected::ExpectedValues;
 use crate::rating::pr;
@@ -249,7 +249,7 @@ impl Monitor {
 
         let early = with_clans(
             assemble_battle(&arena, Some(region), &catalog, None, |vehicle| {
-                roster.stats_for(vehicle, &HashMap::new(), None)
+                roster.stats_for(vehicle, None, None)
             }),
             &roster,
         );
@@ -266,6 +266,7 @@ impl Monitor {
         if !self.is_current(generation) {
             return;
         }
+        let ship_notice = ship_stats_notice(&roster, &ship_records);
 
         let complete = with_clans(
             assemble_battle(
@@ -273,14 +274,17 @@ impl Monitor {
                 Some(region),
                 &catalog,
                 expected.as_ref(),
-                |vehicle| roster.stats_for(vehicle, &ship_records, expected.as_ref()),
+                |vehicle| roster.stats_for(vehicle, Some(&ship_records), expected.as_ref()),
             ),
             &roster,
         );
         self.update(|snapshot| Snapshot {
             phase: Phase::InBattle,
             battle: Some(complete),
-            notice: region_notice.clone().or(expected_notice.clone()),
+            notice: region_notice
+                .clone()
+                .or(ship_notice.clone())
+                .or(expected_notice.clone()),
             ..snapshot
         });
     }
@@ -379,7 +383,7 @@ impl Roster {
     fn stats_for(
         &self,
         vehicle: &ArenaVehicle,
-        ships: &HashMap<u64, Vec<ShipRecord>>,
+        ships: Option<&HashMap<u64, Vec<ShipRecord>>>,
         expected: Option<&ExpectedValues>,
     ) -> PlayerStats {
         if vehicle.is_bot() {
@@ -393,7 +397,12 @@ impl Roster {
                 account_id: account.account_id,
             };
         };
-        let records = ships.get(&account.account_id);
+        let records = ships.and_then(|ships| ships.get(&account.account_id));
+        let ship_state = match (ships, records) {
+            (None, _) => ShipStatsState::Pending,
+            (Some(_), Some(_)) => ShipStatsState::Ready,
+            (Some(_), None) => ShipStatsState::Unavailable,
+        };
         let overall_rating = expected.zip(records).and_then(|(expected, records)| {
             let per_ship: Vec<(u64, Totals)> = records
                 .iter()
@@ -428,6 +437,7 @@ impl Roster {
             ship_solo: ship_record
                 .and_then(|record| record.pvp_solo)
                 .map(ship_line),
+            ship_state,
             created_at: account.created_at,
         }
     }
@@ -480,6 +490,24 @@ async fn fetch_ship_records(client: &WgClient, roster: &Roster) -> HashMap<u64, 
         })
         .collect()
         .await
+}
+
+fn ship_stats_notice(roster: &Roster, fetched: &HashMap<u64, Vec<ShipRecord>>) -> Option<Notice> {
+    let missing = roster
+        .accounts
+        .values()
+        .filter(|account| !account.hidden && account.pvp.is_some())
+        .filter(|account| !fetched.contains_key(&account.account_id))
+        .count();
+    let players = if missing == 1 { "player" } else { "players" };
+    (missing > 0).then(|| {
+        notice(
+            NoticeLevel::Warning,
+            format!(
+                "Wargaming did not return ship statistics for {missing} {players}. Press Refresh to try again."
+            ),
+        )
+    })
 }
 
 fn with_clans(battle: Battle, roster: &Roster) -> Battle {
@@ -697,14 +725,13 @@ mod tests {
             )]),
             clans: HashMap::new(),
         };
-        let stats = roster.stats_for(&vehicle("Shy", Relation::Enemy, 1), &HashMap::new(), None);
+        let stats = roster.stats_for(&vehicle("Shy", Relation::Enemy, 1), None, None);
         assert_eq!(stats, PlayerStats::Hidden { account_id: 7 });
     }
 
     #[test]
     fn a_name_wargaming_does_not_know_is_reported_as_not_found() {
-        let stats =
-            empty_roster().stats_for(&vehicle("Ghost", Relation::Ally, 1), &HashMap::new(), None);
+        let stats = empty_roster().stats_for(&vehicle("Ghost", Relation::Ally, 1), None, None);
         assert_eq!(stats, PlayerStats::NotFound);
     }
 
@@ -716,10 +743,7 @@ mod tests {
             relation: Relation::Enemy,
             ship_id: 1,
         };
-        assert_eq!(
-            empty_roster().stats_for(&bot, &HashMap::new(), None),
-            PlayerStats::Bot
-        );
+        assert_eq!(empty_roster().stats_for(&bot, None, None), PlayerStats::Bot);
     }
 
     #[test]
@@ -753,5 +777,70 @@ mod tests {
             watch_root(Path::new("D:/replays/15..0")),
             Path::new("D:/replays/15..0")
         );
+    }
+
+    fn visible_roster() -> Roster {
+        Roster {
+            ids_by_name: HashMap::from([("seen".to_string(), 5)]),
+            accounts: HashMap::from([(
+                5,
+                AccountRecord {
+                    account_id: 5,
+                    hidden: false,
+                    created_at: None,
+                    pvp: Some(Totals {
+                        battles: 10,
+                        wins: 6,
+                        ..Totals::default()
+                    }),
+                    pvp_solo: None,
+                },
+            )]),
+            clans: HashMap::new(),
+        }
+    }
+
+    fn ship_state_of(stats: PlayerStats) -> Option<ShipStatsState> {
+        match stats {
+            PlayerStats::Loaded { ship_state, .. } => Some(ship_state),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn ship_stats_are_pending_until_they_are_fetched() {
+        let stats = visible_roster().stats_for(&vehicle("Seen", Relation::Ally, 1), None, None);
+        assert_eq!(ship_state_of(stats), Some(ShipStatsState::Pending));
+    }
+
+    #[test]
+    fn a_failed_ship_stats_request_is_unavailable_not_empty() {
+        let fetched = HashMap::new();
+        let stats =
+            visible_roster().stats_for(&vehicle("Seen", Relation::Ally, 1), Some(&fetched), None);
+        assert_eq!(ship_state_of(stats), Some(ShipStatsState::Unavailable));
+    }
+
+    #[test]
+    fn a_player_without_battles_in_the_ship_is_ready_with_no_ship_line() {
+        let other_ship = ShipRecord {
+            ship_id: 2,
+            pvp: Totals {
+                battles: 3,
+                ..Totals::default()
+            },
+            pvp_solo: None,
+        };
+        let fetched = HashMap::from([(5, vec![other_ship])]);
+        let stats =
+            visible_roster().stats_for(&vehicle("Seen", Relation::Ally, 1), Some(&fetched), None);
+        assert!(matches!(
+            stats,
+            PlayerStats::Loaded {
+                ship: None,
+                ship_state: ShipStatsState::Ready,
+                ..
+            }
+        ));
     }
 }

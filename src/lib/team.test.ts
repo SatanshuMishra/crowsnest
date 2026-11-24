@@ -34,6 +34,7 @@ function loaded(change: Partial<Extract<PlayerStats, { kind: "loaded" }>> = {}):
     overallSolo: null,
     ship: line(),
     shipSolo: null,
+    shipState: "ready",
     createdAt: null,
     ...change,
   };

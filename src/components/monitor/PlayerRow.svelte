@@ -108,6 +108,14 @@
           colored={settings.coloredValues}
         />
       {/each}
+    {:else if stats.kind === "loaded" && stats.shipState === "pending"}
+      {#each columns.ship as column (column.id)}
+        <StatCell kind={column.kind} label={column.name + suffix} pending />
+      {/each}
+    {:else if stats.kind === "loaded" && stats.shipState === "unavailable"}
+      <td class="message" colspan={columns.ship.length} title="Wargaming did not return ship statistics. Press Refresh to try again.">
+        <span class="message-line"><Icon name="warning" size={14} />Ship stats unavailable</span>
+      </td>
     {:else}
       <td class="message" colspan={columns.ship.length}>No battles in this ship</td>
     {/if}

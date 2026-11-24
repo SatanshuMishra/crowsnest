@@ -157,6 +157,9 @@
             </tr>
           </tbody>
         </table>
+        {#if stats?.kind === "loaded" && stats.shipState === "unavailable"}
+          <p class="note">Wargaming did not return ship statistics for this player. Press Refresh to try again.</p>
+        {/if}
         <p class="note">
           Ship columns cover this ship only; solo columns leave out battles played in a division. Personal rating uses
           expected values from wows-numbers.com.

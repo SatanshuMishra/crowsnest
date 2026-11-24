@@ -56,6 +56,8 @@ export interface StatLine {
   personalRating: number | null;
 }
 
+export type ShipStatsState = "pending" | "ready" | "unavailable";
+
 export type PlayerStats =
   | { kind: "pending" }
   | { kind: "bot" }
@@ -69,6 +71,7 @@ export type PlayerStats =
       overallSolo: StatLine | null;
       ship: StatLine | null;
       shipSolo: StatLine | null;
+      shipState: ShipStatsState;
       createdAt: number | null;
     };
 

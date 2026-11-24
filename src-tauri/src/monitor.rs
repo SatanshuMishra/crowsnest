@@ -351,11 +351,12 @@ impl Monitor {
             *lock(&self.0.division_task) = Some(task);
         }
 
+        let own_application_id = settings.has_own_application_id();
         let client = self.client_for(region, application_id);
         let monitor = self.clone();
         let task = tauri::async_runtime::spawn(async move {
             monitor
-                .load_battle(generation, client, arena, region_notice)
+                .load_battle(generation, client, arena, region_notice, own_application_id)
                 .await;
         });
         *lock(&self.0.load_task) = Some(task);
@@ -438,6 +439,7 @@ impl Monitor {
         client: WgClient,
         arena: ArenaInfo,
         region_notice: Option<Notice>,
+        own_application_id: bool,
     ) {
         let region = client.region();
         let ship_ids: Vec<u64> = arena
@@ -468,7 +470,10 @@ impl Monitor {
                 self.update_current(generation, |snapshot| Snapshot {
                     phase,
                     battle: Some(keep_divisions(snapshot.battle.as_ref(), failed)),
-                    notice: Some(notice(NoticeLevel::Error, reason.clone())),
+                    notice: Some(notice(
+                        NoticeLevel::Error,
+                        roster_failure_message(&error, own_application_id),
+                    )),
                     ..snapshot
                 });
                 return;
@@ -591,6 +596,17 @@ impl Monitor {
         if let Err(error) = self.0.app.emit(SNAPSHOT_EVENT, next) {
             log::warn!("could not send the snapshot to the window: {error}");
         }
+    }
+}
+
+const BUNDLED_ID_BLOCKED: &str = "Wargaming has blocked the application ID built into Crowsnest. Enter your own free application ID in Settings to load stats again.";
+const OWN_ID_BLOCKED: &str = "Wargaming has blocked your application ID. Create a new Standalone application on developers.wargaming.net and enter its ID in Settings.";
+
+fn roster_failure_message(error: &WgError, own_application_id: bool) -> String {
+    match (error, own_application_id) {
+        (WgError::ApplicationBlocked, false) => BUNDLED_ID_BLOCKED.to_owned(),
+        (WgError::ApplicationBlocked, true) => OWN_ID_BLOCKED.to_owned(),
+        _ => error.to_string(),
     }
 }
 
@@ -932,6 +948,28 @@ fn watch_root(replays_dir: &Path) -> PathBuf {
 mod tests {
     use super::*;
     use crate::model::{Relation, Ship, ShipClass};
+
+    #[test]
+    fn a_blocked_bundled_id_points_to_settings() {
+        assert_eq!(
+            roster_failure_message(&WgError::ApplicationBlocked, false),
+            BUNDLED_ID_BLOCKED
+        );
+    }
+
+    #[test]
+    fn a_blocked_own_id_points_to_a_new_application() {
+        assert_eq!(
+            roster_failure_message(&WgError::ApplicationBlocked, true),
+            OWN_ID_BLOCKED
+        );
+    }
+
+    #[test]
+    fn other_roster_failures_keep_their_own_message() {
+        let error = WgError::Network("the request timed out".into());
+        assert_eq!(roster_failure_message(&error, false), error.to_string());
+    }
 
     fn vehicle(name: &str, relation: Relation, ship_id: u64) -> ArenaVehicle {
         ArenaVehicle {

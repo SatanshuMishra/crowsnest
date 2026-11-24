@@ -20,6 +20,7 @@ const initial: Settings = {
   theme: "system",
   density: "comfortable",
   textSize: "normal",
+  palette: "muted",
   coloredValues: true,
   highlight: "edge",
   highlightStat: "personalRating",
@@ -29,6 +30,7 @@ const initial: Settings = {
   alwaysOnTop: false,
   closeToTray: false,
   checkForUpdates: true,
+  introSeen: 0,
 };
 
 interface SaveRequest {

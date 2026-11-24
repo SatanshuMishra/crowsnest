@@ -1,4 +1,6 @@
+import { resolveTheme } from "./appearance";
 import { backend } from "./backend";
+import type { SetupAudience } from "./intro";
 import type { AppInfo, Settings, Snapshot } from "./types";
 
 export type View = "monitor" | "settings";
@@ -77,6 +79,8 @@ class AppStore {
   snapshot = $state<Snapshot | null>(null);
   info = $state<AppInfo | null>(null);
   view = $state<View>("monitor");
+  systemDark = $state(true);
+  setup = $state<SetupAudience | null>(null);
   readonly #settings = new SettingsStore(backend.saveSettings);
 
   get settings(): Settings | null {
@@ -85,6 +89,10 @@ class AppStore {
 
   get saveError(): string | null {
     return this.#settings.saveError;
+  }
+
+  get theme(): "dark" | "light" {
+    return resolveTheme(this.settings?.theme ?? "system", this.systemDark);
   }
 
   async start(): Promise<() => void> {

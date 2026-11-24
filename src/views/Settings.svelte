@@ -1,354 +1,180 @@
+<script lang="ts" module>
+  import type { SectionKey } from "../lib/settingsIndex";
+
+  let lastSection: SectionKey = "game";
+</script>
+
 <script lang="ts">
-  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { tick } from "svelte";
   import About from "../components/settings/About.svelte";
-  import ApplicationIdField from "../components/settings/ApplicationIdField.svelte";
-  import InstallPicker from "../components/settings/InstallPicker.svelte";
-  import SettingsSection from "../components/settings/SettingsSection.svelte";
-  import Button from "../components/ui/Button.svelte";
+  import AppearancePanel from "../components/settings/AppearancePanel.svelte";
+  import GamePanel from "../components/settings/GamePanel.svelte";
+  import StatisticsPanel from "../components/settings/StatisticsPanel.svelte";
+  import UpdatesPanel from "../components/settings/UpdatesPanel.svelte";
+  import WindowPanel from "../components/settings/WindowPanel.svelte";
   import Icon from "../components/ui/Icon.svelte";
   import IconButton from "../components/ui/IconButton.svelte";
-  import Segmented from "../components/ui/Segmented.svelte";
-  import Toggle from "../components/ui/Toggle.svelte";
   import { focusViewHeading } from "../lib/focus";
+  import { preview } from "../lib/preview.svelte";
+  import { SECTIONS, resultsTitle, searchSettings, sectionTitle, type SettingEntry } from "../lib/settingsIndex";
   import { app } from "../lib/state.svelte";
-  import type { Density, Highlight, HighlightStat, Region, TeamAverage, TextSize, Theme } from "../lib/types";
-  import { updateAnnouncement, updates, type DownloadingState } from "../lib/updates.svelte";
 
-  interface Choice<T extends string> {
-    value: T;
-    label: string;
-  }
+  const paneId = $props.id();
 
-  type ServerChoice = "automatic" | Region;
-
-  const DEVELOPERS_URL = "https://developers.wargaming.net/applications/";
-
-  const regionLabels: Record<Region, string> = { eu: "EU", na: "NA", asia: "Asia" };
-
-  const serverChoices: Choice<ServerChoice>[] = [
-    { value: "automatic", label: "Automatic" },
-    { value: "eu", label: "EU" },
-    { value: "na", label: "NA" },
-    { value: "asia", label: "Asia" },
-  ];
-
-  const teamAverageChoices: (Choice<TeamAverage> & { explanation: string })[] = [
-    { value: "mean", label: "Mean", explanation: "every player counts the same." },
-    {
-      value: "weighted",
-      label: "Weighted",
-      explanation: "win rate weighted by battles played, with each player capped at 40 battles.",
-    },
-    { value: "median", label: "Median", explanation: "the middle player, so one outlier cannot skew the team." },
-  ];
-
-  const themeChoices: Choice<Theme>[] = [
-    { value: "system", label: "System" },
-    { value: "dark", label: "Dark" },
-    { value: "light", label: "Light" },
-  ];
-
-  const densityChoices: Choice<Density>[] = [
-    { value: "comfortable", label: "Comfortable" },
-    { value: "compact", label: "Compact" },
-  ];
-
-  const textSizeChoices: Choice<TextSize>[] = [
-    { value: "small", label: "Small" },
-    { value: "normal", label: "Normal" },
-    { value: "large", label: "Large" },
-  ];
-
-  const highlightChoices: Choice<Highlight>[] = [
-    { value: "none", label: "None" },
-    { value: "edge", label: "Edge" },
-    { value: "fill", label: "Fill" },
-  ];
-
-  const highlightStatChoices: Choice<HighlightStat>[] = [
-    { value: "personalRating", label: "Personal rating" },
-    { value: "shipWinRate", label: "Ship win rate" },
-    { value: "accountWinRate", label: "Account win rate" },
-    { value: "averageDamage", label: "Average damage" },
-  ];
-
-  let linkError = $state<string | null>(null);
-  let offer = $state<HTMLDivElement>();
+  let section = $state<SectionKey>(lastSection);
+  let query = $state("");
+  let found = $state<string | null>(null);
+  let pane = $state<HTMLDivElement>();
 
   const settings = $derived(app.settings);
-  const update = $derived(updates.state);
-  const updateNews = $derived(updateAnnouncement(update));
-  const reportedRegion = $derived(app.snapshot?.install?.region ?? null);
-  const serverDescription = $derived(
-    reportedRegion
-      ? `Automatic reads the server from the game, which reports ${regionLabels[reportedRegion]}.`
-      : "Automatic reads the server from the game.",
-  );
-  const checkingByRequest = $derived(update.status === "checking" && !update.silent);
-  const updateInProgress = $derived(update.status === "downloading" || update.status === "ready");
+  const results = $derived(searchSettings(query));
+  const searching = $derived(query.trim() !== "");
+  const current = $derived(SECTIONS.find((entry) => entry.key === section) ?? SECTIONS[0]!);
 
-  function downloadLabel(download: DownloadingState): string {
-    if (download.percent !== null) {
-      return `${download.percent}%`;
+  function go(key: SectionKey) {
+    preview.clear();
+    section = key;
+    lastSection = key;
+    query = "";
+    found = null;
+    if (pane) {
+      pane.scrollTop = 0;
     }
-    return download.received === 0 ? "Starting…" : "Size not known";
   }
 
-  function install() {
-    offer?.focus();
-    void updates.installUpdate();
+  async function reveal(entry: SettingEntry) {
+    go(entry.section);
+    found = entry.key;
+    await tick();
+    const target = pane?.querySelector<HTMLElement>(`[data-setting="${entry.key}"]`);
+    target?.scrollIntoView({ block: "center" });
+    target?.querySelector<HTMLElement>("button:not([tabindex='-1']), input, a[href], summary")?.focus();
   }
 
-  function chooseServer(choice: ServerChoice) {
-    void app.update({ regionOverride: choice === "automatic" ? null : choice });
-  }
-
-  async function openDevelopers(event: MouseEvent) {
-    event.preventDefault();
-    linkError = null;
-    try {
-      await openUrl(DEVELOPERS_URL);
-    } catch {
-      linkError = `Your browser could not be opened. The address is ${DEVELOPERS_URL}`;
+  function onSearchKey(event: KeyboardEvent) {
+    if (event.key === "Escape" && query !== "") {
+      event.preventDefault();
+      query = "";
     }
   }
 </script>
 
 <main class="settings">
-  <div class="column">
+  <nav class="nav" aria-label="Settings sections">
     <header class="header">
       <IconButton icon="back" label="Back" onclick={() => (app.view = "monitor")} />
       <h1 tabindex="-1" {@attach focusViewHeading}>Settings</h1>
     </header>
-
-    {#if app.saveError}
-      <p class="save-error" role="alert">
-        <Icon name="error" />
-        <span>Your last change was not saved: {app.saveError}</span>
-      </p>
-    {/if}
-
-    {#if settings}
-      <SettingsSection title="Game" description="Where Crowsnest finds the game, its replays and your server.">
-        <InstallPicker />
-        <Segmented
-          label="Server"
-          description={serverDescription}
-          value={settings.regionOverride ?? "automatic"}
-          options={serverChoices}
-          onchange={chooseServer}
-        />
-      </SettingsSection>
-
-      <SettingsSection title="Statistics" description="Crowsnest reads public statistics from the Wargaming API.">
-        <p class="hint">
-          Get a free application ID by creating a Standalone application on
-          <a href={DEVELOPERS_URL} onclick={openDevelopers}>developers.wargaming.net</a>.
-        </p>
-        <div class="feedback" aria-live="polite">
-          {#if linkError}
-            <p class="message error"><Icon name="error" /><span>{linkError}</span></p>
-          {/if}
-        </div>
-        <ApplicationIdField />
-        <Toggle
-          label="Solo statistics"
-          description="Count only battles played without a division."
-          checked={settings.soloStats}
-          onchange={(soloStats) => app.update({ soloStats })}
-        />
-        <Segmented
-          label="Team average"
-          description="How the team summary combines its players."
-          value={settings.teamAverage}
-          options={teamAverageChoices}
-          onchange={(teamAverage) => app.update({ teamAverage })}
-        />
-        <dl class="explanations">
-          {#each teamAverageChoices as choice (choice.value)}
-            <div>
-              <dt>{choice.label}:</dt>
-              <dd>{choice.explanation}</dd>
-            </div>
-          {/each}
-        </dl>
-      </SettingsSection>
-
-      <SettingsSection title="Appearance">
-        <Segmented
-          label="Theme"
-          description="System follows your Windows setting."
-          value={settings.theme}
-          options={themeChoices}
-          onchange={(theme) => app.update({ theme })}
-        />
-        <Segmented
-          label="Density"
-          value={settings.density}
-          options={densityChoices}
-          onchange={(density) => app.update({ density })}
-        />
-        <Segmented
-          label="Text size"
-          value={settings.textSize}
-          options={textSizeChoices}
-          onchange={(textSize) => app.update({ textSize })}
-        />
-        <Toggle
-          label="Coloured values"
-          description="Colour win rates and personal rating by their tier. Every tier name stays in the tooltip either way."
-          checked={settings.coloredValues}
-          onchange={(coloredValues) => app.update({ coloredValues })}
-        />
-        <Segmented
-          label="Row highlight"
-          description="Mark each player with a small tier-coloured square at the edge, or tint the whole row."
-          value={settings.highlight}
-          options={highlightChoices}
-          onchange={(highlight) => app.update({ highlight })}
-        />
-        <Segmented
-          label="Highlight by"
-          description={settings.highlight === "none"
-            ? "Unavailable while Row highlight is None. Choose Edge or Fill first."
-            : "The statistic whose tier sets each row's highlight."}
-          disabled={settings.highlight === "none"}
-          value={settings.highlightStat}
-          options={highlightStatChoices}
-          onchange={(highlightStat) => app.update({ highlightStat })}
-        />
-        <Toggle
-          label="Show clan tags"
-          description="Show each player's clan tag next to their name."
-          checked={settings.showClanTags}
-          onchange={(showClanTags) => app.update({ showClanTags })}
-        />
-      </SettingsSection>
-
-      <SettingsSection title="Window">
-        <Toggle
-          label="Always on top"
-          description="Keep Crowsnest above other windows."
-          checked={settings.alwaysOnTop}
-          onchange={(alwaysOnTop) => app.update({ alwaysOnTop })}
-        />
-        <Toggle
-          label="Close to tray"
-          description="Closing the window hides Crowsnest in the notification area. Quit it from the tray menu."
-          checked={settings.closeToTray}
-          onchange={(closeToTray) => app.update({ closeToTray })}
-        />
-      </SettingsSection>
-
-      <SettingsSection title="Updates" description="New releases come from the Crowsnest page on GitHub.">
-        <Toggle
-          label="Check for updates automatically"
-          description="Look for a new release a few seconds after Crowsnest starts."
-          checked={settings.checkForUpdates}
-          onchange={(checkForUpdates) => app.update({ checkForUpdates })}
-        />
-        <div class="version-row">
-          <div class="version-text">
-            <span class="label">Installed version</span>
-            <span class="num">{app.info?.version ?? "Not known"}</span>
-          </div>
-          <Button
-            busy={checkingByRequest}
-            disabled={updateInProgress}
-            title={updateInProgress ? "An update is already being installed" : undefined}
-            onclick={() => updates.checkNow()}
+    <label class="search">
+      <Icon name="search" size={16} />
+      <input
+        type="search"
+        placeholder="Search settings"
+        aria-label="Search settings"
+        aria-controls={paneId}
+        bind:value={query}
+        onkeydown={onSearchKey}
+      />
+    </label>
+    <ul class="sections">
+      {#each SECTIONS as entry (entry.key)}
+        {@const selected = !searching && entry.key === section}
+        <li>
+          <button
+            type="button"
+            class="section-link"
+            class:selected
+            aria-current={selected ? "true" : undefined}
+            onclick={() => go(entry.key)}
           >
-            <Icon name="refresh" />
-            {checkingByRequest ? "Checking…" : "Check now"}
-          </Button>
-        </div>
-        <div class="feedback" aria-live="polite">
-          {#if checkingByRequest}
-            <p class="message muted"><Icon name="refresh" /><span>Checking for updates…</span></p>
-          {:else if update.status === "upToDate"}
-            <p class="message success"><Icon name="check" /><span>Crowsnest is up to date.</span></p>
-          {:else if update.status === "error"}
-            <p class="message error"><Icon name="error" /><span>{update.message}</span></p>
-          {/if}
-        </div>
-        <span class="visually-hidden" aria-live="polite">{updateNews}</span>
-        {#if update.status === "available" || update.status === "downloading" || update.status === "ready"}
-          <div bind:this={offer} class="offer" tabindex="-1" role="group" aria-label="Crowsnest update">
-            {#if update.status === "available"}
-              <p class="message">
-                <Icon name="download" />
-                <span>Version <span class="num">{update.version}</span> is available.</span>
-              </p>
-              {#if update.error}
-                <p class="message error"><Icon name="error" /><span>{update.error}</span></p>
-              {/if}
-              {#if update.notes}
-                <details class="notes">
-                  <summary>What's new</summary>
-                  <p>{update.notes}</p>
-                </details>
-              {/if}
-              <div class="actions">
-                <Button variant="primary" onclick={install}>
-                  <Icon name="download" />
-                  {update.error ? "Try again" : `Install ${update.version}`}
-                </Button>
-              </div>
-            {:else if update.status === "downloading"}
-              <p class="message">
-                <Icon name="download" />
-                <span>Downloading version <span class="num">{update.version}</span>…</span>
-              </p>
-              <div class="progress">
-                <div
-                  class="bar"
-                  class:indeterminate={update.percent === null}
-                  role="progressbar"
-                  aria-label="Update download"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={update.percent ?? undefined}
-                >
-                  <span class="fill" style:width={update.percent === null ? undefined : `${update.percent}%`}></span>
-                </div>
-                <span class="num">{downloadLabel(update)}</span>
-              </div>
-            {:else if update.status === "ready"}
-              <p class="message success">
-                <Icon name="check" />
-                <span>Version <span class="num">{update.version}</span> is installed. Restart Crowsnest to use it.</span>
-              </p>
-              {#if update.error}
-                <p class="message error"><Icon name="error" /><span>{update.error}</span></p>
-              {/if}
-              <div class="actions">
-                <Button variant="primary" onclick={() => updates.restart()}>Restart to update</Button>
-              </div>
-            {/if}
-          </div>
-        {/if}
-      </SettingsSection>
+            <span class="name">{entry.title}</span>
+            <span class="summary">{entry.summary}</span>
+          </button>
+        </li>
+      {/each}
+    </ul>
+  </nav>
 
-      <SettingsSection title="About">
-        <About />
-      </SettingsSection>
-    {/if}
+  <div class="pane" id={paneId} data-scroll-root bind:this={pane}>
+    <div class="column">
+      {#if app.saveError}
+        <p class="save-error" role="alert">
+          <Icon name="error" />
+          <span>Your last change was not saved: {app.saveError}</span>
+        </p>
+      {/if}
+
+      <p class="visually-hidden" aria-live="polite">{searching ? resultsTitle(query, results.length) : ""}</p>
+
+      {#if searching}
+        <section class="panel" aria-labelledby="{paneId}-results">
+          <h2 id="{paneId}-results">{resultsTitle(query, results.length)}</h2>
+          {#if results.length > 0}
+            <ul class="results">
+              {#each results as entry (entry.key)}
+                <li>
+                  <button type="button" class="result" onclick={() => reveal(entry)}>
+                    <span class="result-head">
+                      <span class="result-label">{entry.label}</span>
+                      <span class="result-section">{sectionTitle(entry.section)}</span>
+                    </span>
+                    <span class="result-description">{entry.description}</span>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {:else}
+            <p class="description">Try another word, such as colour, tray or server.</p>
+          {/if}
+        </section>
+      {:else if settings}
+        {#key section}
+          <section class="panel" aria-labelledby="{paneId}-title">
+            <header class="panel-header">
+              <h2 id="{paneId}-title">{current.title}</h2>
+              {#if current.description}
+                <p class="description">{current.description}</p>
+              {/if}
+            </header>
+            <div class="panel-body">
+              {#if section === "game"}
+                <GamePanel {settings} {found} />
+              {:else if section === "statistics"}
+                <StatisticsPanel {settings} {found} />
+              {:else if section === "appearance"}
+                <AppearancePanel {settings} {found} />
+              {:else if section === "window"}
+                <WindowPanel {settings} {found} />
+              {:else if section === "updates"}
+                <UpdatesPanel {settings} {found} />
+              {:else}
+                <div data-setting="logs" data-found={found === "logs" || undefined}>
+                  <About />
+                </div>
+              {/if}
+            </div>
+          </section>
+        {/key}
+      {/if}
+    </div>
   </div>
 </main>
 
 <style>
   .settings {
-    position: relative;
+    display: flex;
     height: 100%;
-    overflow-y: auto;
-    padding: var(--space-5) var(--space-5) var(--space-6);
   }
 
-  .column {
-    display: grid;
-    width: 100%;
-    max-width: calc(var(--space-6) * 20);
-    margin: 0 auto;
+  .nav {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--space-4);
+    width: var(--nav-width);
+    padding: var(--space-5) var(--space-3) var(--space-5) var(--space-5);
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
   }
 
   .header {
@@ -356,7 +182,6 @@
     align-items: center;
     gap: var(--space-2);
     margin-left: calc(-1 * var(--space-2));
-    padding-bottom: var(--space-4);
   }
 
   h1 {
@@ -367,169 +192,156 @@
     letter-spacing: var(--tracking-display);
   }
 
+  .search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 32px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+  }
+
+  .search:focus-within {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .search input {
+    flex: 1;
+    min-width: 0;
+    min-height: 30px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font-size: var(--fs-md);
+    outline: none;
+  }
+
+  .search input::placeholder {
+    color: var(--text-faint);
+  }
+
+  .sections,
+  .results {
+    display: grid;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .section-link,
+  .result {
+    display: grid;
+    gap: 2px;
+    width: 100%;
+    min-height: 40px;
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease-out);
+  }
+
+  .section-link {
+    margin-left: calc(-1 * var(--space-3));
+    width: calc(100% + var(--space-3));
+    color: var(--text-muted);
+  }
+
+  .section-link:hover,
+  .result:hover,
+  .selected {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  .name {
+    font-size: var(--fs-md);
+  }
+
+  .selected .name {
+    font-weight: var(--weight-strong);
+  }
+
+  .summary {
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+  }
+
+  .pane {
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-5) var(--space-6) var(--space-6);
+    overflow-y: auto;
+  }
+
+  .column {
+    display: grid;
+    gap: var(--space-4);
+    max-width: var(--settings-width);
+  }
+
+  .panel {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .panel-header {
+    display: grid;
+    gap: var(--space-1);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border);
+  }
+
+  h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--fs-xl);
+    font-weight: var(--weight-strong);
+    letter-spacing: var(--tracking-display);
+  }
+
+  .description {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: var(--fs-sm);
+  }
+
+  .panel-body {
+    display: grid;
+    gap: var(--space-3);
+  }
+
   .save-error {
     display: flex;
     align-items: flex-start;
     gap: var(--space-2);
-    margin: 0 0 var(--space-4);
+    margin: 0;
     color: var(--danger);
     font-size: var(--fs-md);
   }
 
-  .hint {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: var(--fs-sm);
-  }
-
-  a {
-    color: var(--text);
-    text-decoration: underline;
-    text-decoration-color: var(--text-faint);
-    text-underline-offset: 0.2em;
-  }
-
-  a:hover {
-    text-decoration-color: currentColor;
-  }
-
-  .explanations {
-    display: grid;
-    gap: var(--space-1);
-    margin: calc(-1 * var(--space-2)) 0 0;
-    color: var(--text-muted);
-    font-size: var(--fs-sm);
-  }
-
-  .explanations div {
-    display: flex;
-    gap: var(--space-1);
-  }
-
-  .explanations dt {
-    color: var(--text);
-  }
-
-  .explanations dd {
-    margin: 0;
-  }
-
-  .version-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2) var(--space-4);
-    min-height: var(--target-min);
-  }
-
-  .version-text {
+  .result-head {
     display: flex;
     align-items: baseline;
-    gap: var(--space-2);
-    font-size: var(--fs-md);
-  }
-
-  .label {
-    font-size: var(--fs-md);
-  }
-
-  .feedback:empty {
-    display: none;
-  }
-
-  .offer {
-    display: grid;
+    justify-content: space-between;
     gap: var(--space-3);
   }
 
-  .message {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-    margin: 0;
+  .result-label {
     font-size: var(--fs-md);
+    font-weight: var(--weight-medium);
   }
 
-  .message :global(svg) {
-    flex: none;
-    margin-top: 0.125em;
-  }
-
-  .muted {
-    color: var(--text-muted);
-  }
-
-  .success {
-    color: var(--success);
-  }
-
-  .error {
-    color: var(--danger);
-  }
-
-  .notes summary {
-    min-height: var(--target-min);
-    line-height: var(--target-min);
+  .result-section,
+  .result-description {
     color: var(--text-muted);
     font-size: var(--fs-sm);
-    cursor: pointer;
-  }
-
-  .notes p {
-    max-height: calc(var(--space-6) * 5);
-    margin: 0;
-    overflow-y: auto;
-    color: var(--text-muted);
-    font-size: var(--fs-sm);
-    white-space: pre-wrap;
-  }
-
-  .actions {
-    display: flex;
-    gap: var(--space-2);
-  }
-
-  .progress {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    font-size: var(--fs-sm);
-  }
-
-  .bar {
-    position: relative;
-    flex: 1 1 auto;
-    height: 2px;
-    overflow: hidden;
-    background: var(--border-strong);
-  }
-
-  .fill {
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 0;
-    background: var(--text);
-    transition: width var(--duration-base) var(--ease-out);
-  }
-
-  .indeterminate .fill {
-    width: 40%;
-    animation: sweep calc(var(--duration-base) * 6) var(--ease-out) infinite;
-  }
-
-  @keyframes sweep {
-    from {
-      transform: translateX(-100%);
-    }
-    to {
-      transform: translateX(250%);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .indeterminate .fill {
-      animation: none;
-    }
   }
 </style>

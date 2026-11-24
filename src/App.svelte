@@ -1,18 +1,33 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import Onboarding from "./components/Onboarding.svelte";
+  import Toast from "./components/Toast.svelte";
   import TopBar, { type Screen } from "./components/TopBar.svelte";
+  import {
+    INTRO_VERSION,
+    introAudience,
+    introCanOpen,
+    introInterrupted,
+    setupToast,
+    type SetupOutcome,
+  } from "./lib/intro";
   import { app } from "./lib/state.svelte";
+  import { toasts } from "./lib/toast.svelte";
+  import type { Settings as SettingsValues } from "./lib/types";
   import Monitor from "./views/Monitor.svelte";
   import Settings from "./views/Settings.svelte";
   import Setup from "./views/Setup.svelte";
 
   const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
-  let systemDark = $state(darkQuery.matches);
+  app.systemDark = darkQuery.matches;
   let startError = $state<string | null>(null);
+  let introOffered = false;
+  let introBefore = $state.raw<SettingsValues | null>(null);
+  let onboardingClosing = $state(false);
 
   onMount(() => {
     const onSchemeChange = (event: MediaQueryListEvent) => {
-      systemDark = event.matches;
+      app.systemDark = event.matches;
     };
     darkQuery.addEventListener("change", onSchemeChange);
     let unlisten: (() => void) | undefined;
@@ -30,17 +45,10 @@
     };
   });
 
-  const theme = $derived.by(() => {
-    const chosen = app.settings?.theme ?? "system";
-    if (chosen === "system") {
-      return systemDark ? "dark" : "light";
-    }
-    return chosen;
-  });
-
   $effect(() => {
     const root = document.documentElement;
-    root.dataset.theme = theme;
+    root.dataset.theme = app.theme;
+    root.dataset.palette = app.settings?.palette ?? "muted";
     root.dataset.density = app.settings?.density ?? "comfortable";
     root.dataset.textSize = app.settings?.textSize ?? "normal";
   });
@@ -51,6 +59,46 @@
   const screen = $derived(app.view === "settings" ? "settings" : needsSetup ? "setup" : "monitor");
   const ready = $derived(startError === null && app.snapshot !== null && app.settings !== null);
   const barScreen = $derived<Screen>(ready ? screen : "boot");
+
+  $effect(() => {
+    const settings = app.settings;
+    const phase = app.snapshot?.phase;
+    if (introOffered || !ready || !settings || !phase || app.setup !== null) {
+      return;
+    }
+    const audience = introAudience(settings.introSeen);
+    if (audience === null) {
+      introOffered = true;
+    } else if (introCanOpen(phase, screen === "monitor")) {
+      introOffered = true;
+      untrack(() => (introBefore ??= $state.snapshot(settings)));
+      app.setup = audience;
+    }
+  });
+
+  $effect(() => {
+    if (!onboardingClosing && introInterrupted(app.setup, app.snapshot?.phase)) {
+      app.setup = null;
+      introOffered = false;
+    }
+  });
+
+  function closeOnboarding(outcome: SetupOutcome) {
+    const audience = app.setup;
+    app.setup = null;
+    onboardingClosing = false;
+    if (audience === null) {
+      return;
+    }
+    if (audience !== "tour") {
+      introBefore = null;
+      void app.update({ introSeen: INTRO_VERSION });
+    }
+    const toast = setupToast(audience, outcome);
+    if (toast) {
+      toasts.show(toast);
+    }
+  }
 </script>
 
 <div class="window">
@@ -67,7 +115,7 @@
       </main>
     {:else}
       {#key screen}
-        <div class="screen">
+        <div class="screen" inert={app.setup !== null}>
           {#if screen === "settings"}
             <Settings />
           {:else if screen === "setup"}
@@ -77,8 +125,18 @@
           {/if}
         </div>
       {/key}
+      {#if app.setup}
+        <Onboarding
+          audience={app.setup}
+          settings={app.settings}
+          before={app.setup === "tour" ? null : introBefore}
+          onclosing={() => (onboardingClosing = true)}
+          onclose={closeOnboarding}
+        />
+      {/if}
     {/if}
   </div>
+  <Toast />
 </div>
 
 <style>
@@ -89,6 +147,7 @@
   }
 
   .body {
+    position: relative;
     flex: 1;
     min-height: 0;
   }

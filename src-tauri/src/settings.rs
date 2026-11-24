@@ -34,6 +34,15 @@ pub enum TextSize {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub enum Palette {
+    #[default]
+    Muted,
+    Vibrant,
+    Friendly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Highlight {
     None,
     #[default]
@@ -70,6 +79,7 @@ pub struct Settings {
     pub theme: Theme,
     pub density: Density,
     pub text_size: TextSize,
+    pub palette: Palette,
     pub colored_values: bool,
     pub highlight: Highlight,
     pub highlight_stat: HighlightStat,
@@ -79,6 +89,8 @@ pub struct Settings {
     pub always_on_top: bool,
     pub close_to_tray: bool,
     pub check_for_updates: bool,
+    #[serde(default)]
+    pub intro_seen: Option<u32>,
 }
 
 impl Default for Settings {
@@ -91,6 +103,7 @@ impl Default for Settings {
             theme: Theme::System,
             density: Density::Comfortable,
             text_size: TextSize::Normal,
+            palette: Palette::Muted,
             colored_values: true,
             highlight: Highlight::Edge,
             highlight_stat: HighlightStat::PersonalRating,
@@ -100,6 +113,7 @@ impl Default for Settings {
             always_on_top: false,
             close_to_tray: false,
             check_for_updates: true,
+            intro_seen: None,
         }
     }
 }
@@ -219,6 +233,32 @@ mod tests {
         let loaded = SettingsFile::in_dir(dir.path()).load().unwrap();
         assert_eq!(loaded.density, Density::Compact);
         assert!(loaded.check_for_updates);
+        assert_eq!(loaded.palette, Palette::Muted);
+        assert_eq!(loaded.intro_seen, None);
+    }
+
+    #[test]
+    fn a_fresh_install_has_seen_no_release() {
+        let dir = tempfile::tempdir().unwrap();
+        let loaded = SettingsFile::in_dir(dir.path()).load().unwrap();
+        assert_eq!(loaded.intro_seen, None);
+        assert_eq!(loaded, Settings::default());
+    }
+
+    #[test]
+    fn the_palette_and_intro_marker_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = SettingsFile::in_dir(dir.path());
+        let settings = Settings {
+            palette: Palette::Friendly,
+            intro_seen: Some(1),
+            ..Settings::default()
+        };
+        file.save(&settings).unwrap();
+        let text = fs::read_to_string(dir.path().join("settings.json")).unwrap();
+        assert!(text.contains("\"palette\": \"friendly\""));
+        assert!(text.contains("\"introSeen\": 1"));
+        assert_eq!(file.load().unwrap(), settings);
     }
 
     #[test]

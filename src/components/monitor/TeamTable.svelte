@@ -9,10 +9,12 @@
     title: string;
     players: Player[];
     settings: Settings;
+    summary?: boolean;
+    marked?: string | null;
     onopen: (player: Player, row: HTMLTableRowElement) => void;
   }
 
-  let { side, title, players, settings, onopen }: Props = $props();
+  let { side, title, players, settings, summary = true, marked = null, onopen }: Props = $props();
   const id = $props.id();
 
   let tableWidth = $state(0);
@@ -21,8 +23,14 @@
   const suffix = $derived(settings.soloStats ? ", solo" : "");
 </script>
 
-<section class="team {side}" aria-labelledby="{id}-title">
-  <TeamSummary {title} titleId="{id}-title" {players} {settings} />
+<section
+  class="team {side}"
+  aria-labelledby={summary ? `${id}-title` : undefined}
+  aria-label={summary ? undefined : title}
+>
+  {#if summary}
+    <TeamSummary {title} titleId="{id}-title" {players} {settings} />
+  {/if}
   <p id="{id}-hint" class="visually-hidden">Press Enter to open this player's details.</p>
   <div class="scroll" bind:clientWidth={tableWidth}>
     <table>
@@ -43,9 +51,9 @@
         </tr>
         <tr>
           {#each allColumns as column (column.id)}
-            <th scope="col" class="num stat-head" title={column.name + suffix}>
+            <th scope="col" class="num stat-head" class:marked={column.id === marked} title={column.name + suffix}>
               <span aria-hidden="true">{column.short}</span>
-              <span class="visually-hidden">{column.name + suffix}</span>
+              <span class="visually-hidden">{column.name + suffix}{column.id === marked ? ", sets the row highlight" : ""}</span>
             </th>
           {/each}
         </tr>
@@ -89,13 +97,13 @@
     position: sticky;
     top: calc(var(--scroll-inset-top, 0px) * -1);
     z-index: 1;
-    background: var(--bg);
+    background: var(--table-surface, var(--bg));
   }
 
   th {
     padding: var(--space-1) var(--cell-pad);
     border-bottom: 1px solid var(--border-strong);
-    background: var(--bg);
+    background: var(--table-surface, var(--bg));
     color: var(--text-muted);
     font-size: var(--fs-xs);
     font-weight: var(--weight-regular);
@@ -112,13 +120,19 @@
     padding-bottom: var(--space-1);
     border-bottom: 0;
     background: linear-gradient(var(--border-strong), var(--border-strong)) center bottom / calc(100% - var(--space-3)) 1px
-      no-repeat var(--bg);
+      no-repeat var(--table-surface, var(--bg));
     text-align: center;
   }
 
   .stat-head {
     padding-bottom: var(--space-2);
     text-align: right;
+  }
+
+  .marked {
+    color: var(--text);
+    font-weight: var(--weight-strong);
+    box-shadow: inset 0 -2px 0 var(--text);
   }
 
   .solo {

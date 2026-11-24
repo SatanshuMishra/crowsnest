@@ -1,6 +1,6 @@
 [package]
 name = "crowsnest"
-version = "1.0.1"
+version = "1.0.2"
 description = "A fast, private, local-first match monitor for World of Warships."
 authors = ["Satanshu Mishra"]
 license = "Apache-2.0"

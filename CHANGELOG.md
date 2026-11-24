@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.1](https://github.com/SatanshuMishra/crowsnest/compare/v1.0.0...v1.0.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* meet the Wargaming API terms and relicense under Apache 2.0 ([19a1eb1](https://github.com/SatanshuMishra/crowsnest/commit/19a1eb186c443fb85bdec91231f5d7f54a8d0fa6))
+* **settings:** show Wargaming player support and the copyright notice ([4dee708](https://github.com/SatanshuMishra/crowsnest/commit/4dee7088b77298e9d8f18586947450df86352cb4))
+* **wg:** tell users what to do when Wargaming blocks the application ID ([6119a92](https://github.com/SatanshuMishra/crowsnest/commit/6119a92d90f2a8d8b6c3dc13ce9c36f39cc7c767))
+
 ## 1.0.0 (2026-11-24)
 
 

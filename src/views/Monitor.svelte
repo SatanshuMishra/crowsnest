@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import PlayerDetail from "../components/monitor/PlayerDetail.svelte";
   import StatusView from "../components/monitor/StatusView.svelte";
   import TeamTable from "../components/monitor/TeamTable.svelte";
@@ -36,9 +37,10 @@
     selection = { side, name: player.name, row };
   }
 
-  function closePlayer() {
+  async function closePlayer() {
     const row = selection?.row;
     selection = null;
+    await tick();
     if (row?.isConnected) {
       row.focus();
     }
@@ -47,7 +49,7 @@
 
 {#if snapshot && settings}
   <div class="monitor">
-    <main class="content">
+    <main class="content" inert={selectedPlayer !== null}>
       <StatusView {snapshot} {settings} {battleShown} />
       {#if battle && battleShown}
         {#key battle.id}

@@ -127,7 +127,7 @@
     }
     if (requested && !dialog.open) {
       linkError = null;
-      dialog.showModal();
+      dialog.show();
     } else if (!requested && dialog.open) {
       dialog.close();
     }
@@ -139,6 +139,13 @@
 
   function onBackdrop(event: MouseEvent) {
     if (event.target === dialog) {
+      close();
+    }
+  }
+
+  function onKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape" && dialog?.open && !event.defaultPrevented) {
+      event.preventDefault();
       close();
     }
   }
@@ -161,179 +168,175 @@
   }
 </script>
 
-<dialog bind:this={dialog} class="sheet" aria-labelledby="{id}-title" onclose={onclose} onclick={onBackdrop}>
-  {#if player && stats}
-    <div class="body">
-      <header>
-        <div class="heading">
-          <p class="relation {player.relation}">{RELATIONS[player.relation]}</p>
-          <h2 id="{id}-title">
-            {#if player.clanTag}<span class="clan">[{player.clanTag}]</span>{/if}
-            {player.name}
-          </h2>
-          {#if player.ship}
-            <p class="ship">
-              <span class="tier"><span class="visually-hidden">Tier </span>{romanNumeral(player.ship.tier)}</span>
-              {player.ship.name}{#if badge}<span class="class-name"> · {badge.name}</span>{/if}
-            </p>
-          {:else}
-            <p class="ship" title="Ship id {player.shipId}">Unknown ship</p>
-          {/if}
-        </div>
-        <IconButton icon="close" label="Close player details" onclick={close} />
-      </header>
+<svelte:window onkeydown={onKeydown} />
 
-      {#if stats.kind === "loaded"}
-        {#each groups as group (group.id)}
-          <table class="lines">
-            <caption>{group.name}</caption>
-            <thead>
-              <tr>
-                <td></td>
-                {#each group.columns as column (column.id)}
-                  <th scope="col" class="num" title={column.title}>{column.name}</th>
-                {/each}
-              </tr>
-            </thead>
-            <tbody>
-              {#each ROWS as row (row.kind)}
+<dialog bind:this={dialog} class="sheet" aria-labelledby="{id}-title" onclose={onclose} onclick={onBackdrop}>
+  <div class="panel">
+    {#if player && stats}
+      <div class="body">
+        <header>
+          <div class="heading">
+            <p class="relation {player.relation}">{RELATIONS[player.relation]}</p>
+            <h2 id="{id}-title">
+              {#if player.clanTag}<span class="clan">[{player.clanTag}]</span>{/if}
+              {player.name}
+            </h2>
+            {#if player.ship}
+              <p class="ship">
+                <span class="tier"><span class="visually-hidden">Tier </span>{romanNumeral(player.ship.tier)}</span>
+                {player.ship.name}{#if badge}<span class="class-name"> · {badge.name}</span>{/if}
+              </p>
+            {:else}
+              <p class="ship" title="Ship id {player.shipId}">Unknown ship</p>
+            {/if}
+          </div>
+          <IconButton icon="close" label="Close player details" autofocus onclick={close} />
+        </header>
+
+        {#if stats.kind === "loaded"}
+          {#each groups as group (group.id)}
+            <table class="lines">
+              <caption>{group.name}</caption>
+              <thead>
                 <tr>
-                  <th scope="row">{row.name}</th>
+                  <td></td>
                   {#each group.columns as column (column.id)}
-                    {@const value = column.line ? lineValue(column.line, row.kind) : null}
-                    <StatCell
-                      kind={row.kind}
-                      label="{row.name}, {group.name.toLowerCase()}, {column.spoken}"
-                      {value}
-                      tier={statTier(row.kind, value, column.expected)}
-                      rated={rated(column, row.kind)}
-                      colored={settings.coloredValues}
-                      pending={loading(column, row.kind)}
-                    />
+                    <th scope="col" class="num" title={column.title}>{column.name}</th>
                   {/each}
                 </tr>
-              {/each}
-              <tr>
-                <th scope="row">Survival rate</th>
-                {#each group.columns as column (column.id)}
-                  {#if loading(column, null)}
-                    <StatCell
-                      kind="winRate"
-                      label="Survival rate, {group.name.toLowerCase()}, {column.spoken}"
-                      rated={false}
-                      pending
-                    />
-                  {:else}
-                    <td class="num plain">{formatWinRate(column.line?.survivalRate)}</td>
-                  {/if}
+              </thead>
+              <tbody>
+                {#each ROWS as row (row.kind)}
+                  <tr>
+                    <th scope="row">{row.name}</th>
+                    {#each group.columns as column (column.id)}
+                      {@const value = column.line ? lineValue(column.line, row.kind) : null}
+                      <StatCell
+                        kind={row.kind}
+                        label="{row.name}, {group.name.toLowerCase()}, {column.spoken}"
+                        {value}
+                        tier={statTier(row.kind, value, column.expected)}
+                        rated={rated(column, row.kind)}
+                        colored={settings.coloredValues}
+                        pending={loading(column, row.kind)}
+                      />
+                    {/each}
+                  </tr>
                 {/each}
-              </tr>
-            </tbody>
-          </table>
-        {/each}
-        {#if stats.shipState === "unavailable"}
-          <p class="note">Wargaming did not return ship statistics for this player. Press Refresh to try again.</p>
-        {:else if stats.shipState === "ready" && stats.ship === null}
-          <p class="note">This player has no random battles in this ship yet.</p>
-        {/if}
-        <p class="note">
-          Solo leaves out battles played in a division. Div 2 and Div 3 count only battles in a division of two or three
-          players. Personal rating uses expected values from wows-numbers.com.
-        </p>
-      {:else if stats.kind === "pending"}
-        <p class="state" aria-busy="true">Loading statistics from Wargaming.</p>
-      {:else if stats.kind === "bot"}
-        <p class="state">This is a bot. Bots have no statistics.</p>
-      {:else if stats.kind === "hidden"}
-        <p class="state with-icon">
-          <Icon name="eyeOff" />
-          This player has hidden their profile, so Wargaming shares no statistics for it.
-        </p>
-      {:else if stats.kind === "notFound"}
-        <p class="state">Wargaming has no account with this name on this server.</p>
-      {:else if stats.kind === "failed"}
-        <p class="state with-icon error">
-          <Icon name="error" />
-          <span>Statistics are unavailable: {stats.reason}</span>
-        </p>
-      {/if}
-
-      {#if links.length > 0}
-        <section class="links" aria-labelledby="{id}-links">
-          <h3 id="{id}-links">Profiles</h3>
-          <div class="link-row">
-            {#each links as link (link.id)}
-              <Button size="sm" onclick={() => follow(link.url)}>
-                {link.label}
-                <Icon name="external" size={14} />
-                <span class="visually-hidden">(opens in your browser)</span>
-              </Button>
-            {/each}
-          </div>
-          {#if linkError}
-            <p class="link-error" role="alert">{linkError}</p>
+                <tr>
+                  <th scope="row">Survival rate</th>
+                  {#each group.columns as column (column.id)}
+                    {#if loading(column, null)}
+                      <StatCell
+                        kind="winRate"
+                        label="Survival rate, {group.name.toLowerCase()}, {column.spoken}"
+                        rated={false}
+                        pending
+                      />
+                    {:else}
+                      <td class="num plain">{formatWinRate(column.line?.survivalRate)}</td>
+                    {/if}
+                  {/each}
+                </tr>
+              </tbody>
+            </table>
+          {/each}
+          {#if stats.shipState === "unavailable"}
+            <p class="note">Wargaming did not return ship statistics for this player. Press Refresh to try again.</p>
+          {:else if stats.shipState === "ready" && stats.ship === null}
+            <p class="note">This player has no random battles in this ship yet.</p>
           {/if}
-        </section>
-      {:else if (stats.kind === "loaded" || stats.kind === "hidden") && region === null}
-        <p class="note">Profile links need the server region, which could not be detected.</p>
-      {/if}
-    </div>
-  {/if}
+          <p class="note">
+            Solo leaves out battles played in a division. Div 2 and Div 3 count only battles in a division of two or three
+            players. Personal rating uses expected values from wows-numbers.com.
+          </p>
+        {:else if stats.kind === "pending"}
+          <p class="state" aria-busy="true">Loading statistics from Wargaming.</p>
+        {:else if stats.kind === "bot"}
+          <p class="state">This is a bot. Bots have no statistics.</p>
+        {:else if stats.kind === "hidden"}
+          <p class="state with-icon">
+            <Icon name="eyeOff" />
+            This player has hidden their profile, so Wargaming shares no statistics for it.
+          </p>
+        {:else if stats.kind === "notFound"}
+          <p class="state">Wargaming has no account with this name on this server.</p>
+        {:else if stats.kind === "failed"}
+          <p class="state with-icon error">
+            <Icon name="error" />
+            <span>Statistics are unavailable: {stats.reason}</span>
+          </p>
+        {/if}
+
+        {#if links.length > 0}
+          <section class="links" aria-labelledby="{id}-links">
+            <h3 id="{id}-links">Profiles</h3>
+            <div class="link-row">
+              {#each links as link (link.id)}
+                <Button size="sm" onclick={() => follow(link.url)}>
+                  {link.label}
+                  <Icon name="external" size={14} />
+                  <span class="visually-hidden">(opens in your browser)</span>
+                </Button>
+              {/each}
+            </div>
+            {#if linkError}
+              <p class="link-error" role="alert">{linkError}</p>
+            {/if}
+          </section>
+        {:else if (stats.kind === "loaded" || stats.kind === "hidden") && region === null}
+          <p class="note">Profile links need the server region, which could not be detected.</p>
+        {/if}
+      </div>
+    {/if}
+  </div>
 </dialog>
 
 <style>
   .sheet {
     position: fixed;
-    inset: var(--titlebar-height) 0 0 auto;
-    width: min(100vw, 26rem);
-    max-width: 100vw;
-    height: calc(100% - var(--titlebar-height));
-    max-height: calc(100% - var(--titlebar-height));
+    inset: var(--titlebar-height) 0 0 0;
+    z-index: 2;
+    width: auto;
+    height: auto;
     margin: 0;
     padding: 0;
     border: 0;
-    border-left: 1px solid var(--border);
-    background: var(--surface-raised);
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
     color: var(--text);
-    box-shadow: var(--shadow-pop);
-  }
-
-  .sheet,
-  .sheet::backdrop {
+    opacity: 0;
     transition:
       opacity var(--duration-base) var(--ease-out),
-      translate var(--duration-base) var(--ease-out),
-      overlay var(--duration-base) allow-discrete,
       display var(--duration-base) allow-discrete;
-  }
-
-  .sheet {
-    opacity: 0;
-    translate: var(--space-5) 0;
   }
 
   .sheet[open] {
     opacity: 1;
+  }
+
+  .panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(100vw, 26rem);
+    overflow-y: auto;
+    border-left: 1px solid var(--border);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-pop);
+    translate: var(--space-5) 0;
+    transition: translate var(--duration-base) var(--ease-out);
+  }
+
+  .sheet[open] .panel {
     translate: 0 0;
-  }
-
-  .sheet::backdrop {
-    background: color-mix(in srgb, var(--bg) 55%, transparent);
-    opacity: 0;
-  }
-
-  .sheet[open]::backdrop {
-    opacity: 1;
   }
 
   @starting-style {
     .sheet[open] {
       opacity: 0;
-      translate: var(--space-5) 0;
     }
 
-    .sheet[open]::backdrop {
-      opacity: 0;
+    .sheet[open] .panel {
+      translate: var(--space-5) 0;
     }
   }
 

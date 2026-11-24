@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/SatanshuMishra/crowsnest/compare/v1.0.2...v1.1.0) (2026-11-24)
+
+
+### Features
+
+* **appearance:** add a first-launch appearance setup and a What is new sheet ([9f08a2c](https://github.com/SatanshuMishra/crowsnest/commit/9f08a2c29e20ee235c482716b51f47b384d2fdb8))
+* **appearance:** add Muted, Vibrant and Colour-blind friendly tier palettes ([1d2566c](https://github.com/SatanshuMishra/crowsnest/commit/1d2566c3f2604e6f8f16c536a7216c5970069732))
+* **appearance:** add palettes, previews, onboarding and a pin ([cf327a5](https://github.com/SatanshuMishra/crowsnest/commit/cf327a53b24d707a0fa46e099a2a3a81f8d57eba))
+* **appearance:** show everyone one release onboarding with a full appearance preview ([1f4c87b](https://github.com/SatanshuMishra/crowsnest/commit/1f4c87b80a6889a85d71f92dd24ee398b0035070))
+* **appearance:** show onboarding as paged cards chosen per release ([09f55bf](https://github.com/SatanshuMishra/crowsnest/commit/09f55bff20b4c6a358edb27dba243f3e7a54c3f4))
+* **settings:** split Settings into sections with search and live appearance previews ([abcb847](https://github.com/SatanshuMishra/crowsnest/commit/abcb847ceca21e52a54f1f112b4cd5a80fd8a9a1))
+* **window:** add a title-bar pin for always on top and confirm refreshes with a toast ([d7c940f](https://github.com/SatanshuMishra/crowsnest/commit/d7c940fb4012d92c8fb2ef26fb5f20545a1af86d))
+
 ## [1.0.2](https://github.com/SatanshuMishra/crowsnest/compare/v1.0.1...v1.0.2) (2026-11-24)
 
 

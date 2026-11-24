@@ -83,6 +83,15 @@ export function statColumns(density: Density, tableWidth = Number.POSITIVE_INFIN
   return { ship, account: [...ACCOUNT_COLUMNS] };
 }
 
+const BUILT_FROM_SHIP_STATS: ReadonlySet<StatKind> = new Set<StatKind>(["personalRating"]);
+
+export function awaitsShipStats(stats: PlayerStats, scope: StatScope, kind: StatKind | null): boolean {
+  if (stats.kind !== "loaded" || stats.shipState !== "pending") {
+    return false;
+  }
+  return scope === "ship" || (kind !== null && BUILT_FROM_SHIP_STATS.has(kind));
+}
+
 export function columnValue(column: StatColumn, lines: PlayerLines): number | null {
   const line = column.scope === "ship" ? lines.ship : lines.overall;
   return line ? lineValue(line, column.kind) : null;

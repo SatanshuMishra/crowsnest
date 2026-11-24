@@ -1,9 +1,11 @@
 <script lang="ts">
   import { open } from "@tauri-apps/plugin-dialog";
+  import { tick } from "svelte";
   import { backend } from "../../lib/backend";
   import { clientVersionLabel } from "../../lib/format";
   import { app } from "../../lib/state.svelte";
   import type { GameInstall, InstallSource } from "../../lib/types";
+  import { describeInstallProblem } from "../../lib/validation";
   import Button from "../ui/Button.svelte";
   import Icon from "../ui/Icon.svelte";
 
@@ -21,8 +23,6 @@
     manual: "Chosen by you",
   };
 
-  const NOT_AN_INSTALL =
-    "That folder is not a World of Warships install. Choose the folder that holds WorldOfWarships.exe and the bin folder.";
   const SAVE_FAILED = "Crowsnest could not save this folder. Try again.";
   const PICKER_FAILED = "The folder picker could not open. Try again.";
 
@@ -32,10 +32,17 @@
   let replaysError = $state<string | null>(null);
   let candidates = $state<GameInstall[]>([]);
   let selected = $state<string | null>(null);
+  let detectButton = $state<HTMLButtonElement>();
+  let chooseReplaysButton = $state<HTMLButtonElement>();
 
   const install = $derived(app.snapshot?.install ?? null);
   const replaysOverride = $derived(app.settings?.replaysDirOverride ?? null);
   const working = $derived(task !== null);
+
+  async function focusOnceSettled(target: HTMLElement | undefined) {
+    await tick();
+    target?.focus();
+  }
 
   async function pickFolder(title: string, defaultPath: string | undefined): Promise<string | null> {
     const path = await open({ directory: true, multiple: false, title, defaultPath });
@@ -78,19 +85,27 @@
       return;
     }
     task = "use";
-    if (await saveInstall(choice.root)) {
-      candidates = [];
-    }
+    const saved = await saveInstall(choice.root);
     task = null;
+    if (saved) {
+      candidates = [];
+      feedback = { tone: "info", text: "Crowsnest now uses this install." };
+      await focusOnceSettled(detectButton);
+    }
+  }
+
+  function cancelCandidates() {
+    candidates = [];
+    void focusOnceSettled(detectButton);
   }
 
   async function adopt(path: string) {
-    const isInstall = await backend.inspectInstall(path).then(
-      () => true,
-      () => false,
+    const problem = await backend.inspectInstall(path).then(
+      () => null,
+      (error: unknown) => describeInstallProblem(error),
     );
-    if (!isInstall) {
-      feedback = { tone: "error", text: NOT_AN_INSTALL };
+    if (problem) {
+      feedback = { tone: "error", text: problem };
       return;
     }
     candidates = [];
@@ -136,6 +151,7 @@
     task = "replays";
     await saveReplaysOverride(null);
     task = null;
+    await focusOnceSettled(chooseReplaysButton);
   }
 </script>
 
@@ -168,6 +184,7 @@
 
   <div class="actions">
     <Button
+      bind:element={detectButton}
       variant={install || candidates.length > 0 ? "secondary" : "primary"}
       busy={task === "detect"}
       disabled={working}
@@ -200,7 +217,7 @@
         <Button variant="primary" size="sm" busy={task === "use"} disabled={working} onclick={useSelected}>
           Use this install
         </Button>
-        <Button variant="ghost" size="sm" disabled={working} onclick={() => (candidates = [])}>Cancel</Button>
+        <Button variant="ghost" size="sm" disabled={working} onclick={cancelCandidates}>Cancel</Button>
       </div>
     </fieldset>
   {/if}
@@ -228,6 +245,7 @@
     </div>
     <div class="actions">
       <Button
+        bind:element={chooseReplaysButton}
         size="sm"
         aria-label="Choose replays folder"
         aria-describedby="{id}-replays-hint"

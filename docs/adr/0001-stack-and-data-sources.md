@@ -17,7 +17,7 @@ Crowsnest replaces wows-monitor, an Electron and Angular desktop app whose stats
 | Personal rating | wows-numbers.com expected values, cached daily on disk | Public file with a documented formula; attribution link shown in the app. |
 | Ship names | Wargaming encyclopedia, cached on disk per game version | One fetch per game patch. |
 | Updates | tauri-plugin-updater reading `latest.json` from GitHub Releases, minisign-signed | Updates are verified against a public key compiled into the app; no update server to run. |
-| Versioning | Conventional Commits, release-please, tauri-action | Version, changelog, tag, installer and update manifest are all produced by CI from the commit history. |
+| Versioning | Conventional Commits, release-please, Tauri CLI signer | Version, changelog, tag, installer and update manifest are all produced by CI from the commit history. The installer is built in one job and signed in another, so build-time dependencies never see the signing key. |
 
 ## Data that leaves the machine
 

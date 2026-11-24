@@ -6,6 +6,7 @@
     variant?: "primary" | "secondary" | "ghost" | "danger";
     size?: "sm" | "md";
     busy?: boolean;
+    element?: HTMLButtonElement;
     children: Snippet;
   }
 
@@ -15,12 +16,14 @@
     busy = false,
     disabled = false,
     type = "button",
+    element = $bindable(),
     children,
     ...rest
   }: Props = $props();
 </script>
 
 <button
+  bind:this={element}
   {...rest}
   {type}
   class="button {variant} {size}"

@@ -12,10 +12,12 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 
+use crate::body::{BodyError, MAX_RESPONSE_BYTES, read_limited};
 use crate::model::{Region, Ship, ShipClass, Totals};
 
 const BATCH_SIZE: usize = 100;
 const SHIPS_PAGE_SIZE: usize = 100;
+const MAX_SHIPS_PAGES: u32 = 50;
 const MAX_STARTS_PER_WINDOW: usize = 8;
 const RATE_WINDOW: Duration = Duration::from_secs(1);
 const TRANSIENT_RETRY_DELAY: Duration = Duration::from_secs(1);
@@ -159,8 +161,17 @@ impl WgClient {
                 status.as_u16()
             )));
         }
-        let body = response.bytes().await.map_err(transport_failure)?;
+        let body = read_limited(response, MAX_RESPONSE_BYTES)
+            .await
+            .map_err(body_failure)?;
         decode_envelope(&body)
+    }
+}
+
+fn body_failure(error: BodyError) -> WgError {
+    match error {
+        BodyError::TooLarge(_) => WgError::Decode(error.to_string()),
+        BodyError::Transport(error) => transport_failure(error),
     }
 }
 
@@ -633,6 +644,12 @@ fn parse_clan_tags(payload: Payload) -> Result<HashMap<u64, String>, WgError> {
 }
 
 fn parse_ships_page(payload: Payload) -> Result<ShipsPage, WgError> {
+    let page_total = payload.meta.page_total.unwrap_or(1);
+    if page_total > MAX_SHIPS_PAGES {
+        return Err(WgError::Decode(format!(
+            "the ship list claims {page_total} pages"
+        )));
+    }
     let entries: Option<HashMap<u64, Option<RawShip>>> = data_as(payload.data)?;
     let ships = entries
         .unwrap_or_default()
@@ -640,7 +657,7 @@ fn parse_ships_page(payload: Payload) -> Result<ShipsPage, WgError> {
         .filter_map(|(ship_id, raw)| raw.map(|raw| ship(ship_id, raw)));
     Ok(ShipsPage {
         ships: sorted_by_id(ships),
-        page_total: payload.meta.page_total.unwrap_or(1),
+        page_total,
     })
 }
 
@@ -897,6 +914,15 @@ mod tests {
                 (500_100_003, "-NF-".to_owned()),
             ])
         );
+    }
+
+    #[test]
+    fn ships_page_refuses_an_implausible_page_total() {
+        let body = ENCYCLOPEDIA_SHIPS.replace("\"page_total\": 3", "\"page_total\": 5000");
+        assert!(matches!(
+            parse_ships_page(payload(&body)),
+            Err(WgError::Decode(_))
+        ));
     }
 
     #[test]

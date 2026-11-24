@@ -7,8 +7,28 @@ export type StatKind = "battles" | "winRate" | "personalRating" | "damage" | "fr
 
 type Formatter = (value: number | null | undefined) => string;
 
+const WIN_RATE_DECIMALS = 1;
+const FRAGS_DECIMALS = 2;
+
+const DISPLAYED_DECIMALS: Record<StatKind, number> = {
+  battles: 0,
+  winRate: WIN_RATE_DECIMALS,
+  personalRating: 0,
+  damage: 0,
+  frags: FRAGS_DECIMALS,
+  xp: 0,
+};
+
 function isPresent(value: number | null | undefined): value is number {
   return value !== null && value !== undefined && Number.isFinite(value);
+}
+
+export function displayedValue(kind: StatKind, value: number | null | undefined): number | null {
+  if (!isPresent(value)) {
+    return null;
+  }
+  const decimals = DISPLAYED_DECIMALS[kind];
+  return decimals === 0 ? Math.round(value) : Number(value.toFixed(decimals));
 }
 
 export function formatInteger(value: number | null | undefined): string {
@@ -23,11 +43,11 @@ export function formatInteger(value: number | null | undefined): string {
 }
 
 export function formatWinRate(value: number | null | undefined): string {
-  return isPresent(value) ? `${value.toFixed(1)}%` : MISSING;
+  return isPresent(value) ? `${value.toFixed(WIN_RATE_DECIMALS)}%` : MISSING;
 }
 
 export function formatFrags(value: number | null | undefined): string {
-  return isPresent(value) ? value.toFixed(2) : MISSING;
+  return isPresent(value) ? value.toFixed(FRAGS_DECIMALS) : MISSING;
 }
 
 export const formatRating: Formatter = formatInteger;

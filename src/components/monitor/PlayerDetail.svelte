@@ -6,7 +6,7 @@
   import StatCell from "./StatCell.svelte";
   import { formatWinRate, romanNumeral, shipClassBadge, type StatKind } from "../../lib/format";
   import { playerLinks } from "../../lib/links";
-  import { lineValue } from "../../lib/team";
+  import { awaitsShipStats, lineValue, type StatScope } from "../../lib/team";
   import { statTier } from "../../lib/tiers";
   import type { ExpectedStats, Player, Region, Relation, Settings, StatLine } from "../../lib/types";
 
@@ -38,6 +38,7 @@
     name: string;
     title: string;
     spoken: string;
+    scope: StatScope;
     line: StatLine | null;
     expected: ExpectedStats | null;
   }
@@ -105,7 +106,7 @@
   });
 
   function columnsFor(
-    group: string,
+    group: StatScope,
     lines: Record<Split, StatLine | null>,
     expected: ExpectedStats | null,
   ): LineColumn[] {
@@ -114,6 +115,7 @@
       name: split.name,
       title: split.title,
       spoken: split.spoken,
+      scope: group,
       line: lines[split.id],
       expected,
     }));
@@ -152,6 +154,10 @@
 
   function rated(column: LineColumn, kind: StatKind): boolean {
     return ACCOUNT_RATED.has(kind) || (column.expected !== null && RATIO_RATED.has(kind));
+  }
+
+  function loading(column: LineColumn, kind: StatKind | null): boolean {
+    return stats !== null && awaitsShipStats(stats, column.scope, kind);
   }
 </script>
 
@@ -202,7 +208,7 @@
                       tier={statTier(row.kind, value, column.expected)}
                       rated={rated(column, row.kind)}
                       colored={settings.coloredValues}
-                      pending={group.pending}
+                      pending={loading(column, row.kind)}
                     />
                   {/each}
                 </tr>
@@ -210,7 +216,16 @@
               <tr>
                 <th scope="row">Survival rate</th>
                 {#each group.columns as column (column.id)}
-                  <td class="num plain">{formatWinRate(column.line?.survivalRate)}</td>
+                  {#if loading(column, null)}
+                    <StatCell
+                      kind="winRate"
+                      label="Survival rate, {group.name.toLowerCase()}, {column.spoken}"
+                      rated={false}
+                      pending
+                    />
+                  {:else}
+                    <td class="num plain">{formatWinRate(column.line?.survivalRate)}</td>
+                  {/if}
                 {/each}
               </tr>
             </tbody>

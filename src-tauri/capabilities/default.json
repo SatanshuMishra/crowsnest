@@ -15,13 +15,19 @@
           "url": "https://wows-numbers.com/*"
         },
         {
-          "url": "https://*.wows-numbers.com/*"
+          "url": "https://na.wows-numbers.com/*"
+        },
+        {
+          "url": "https://asia.wows-numbers.com/*"
         },
         {
           "url": "https://wows-karma.com/*"
         },
         {
-          "url": "https://*.wows-karma.com/*"
+          "url": "https://na.wows-karma.com/*"
+        },
+        {
+          "url": "https://asia.wows-karma.com/*"
         },
         {
           "url": "https://worldofwarships.com/*"
@@ -36,7 +42,7 @@
           "url": "https://developers.wargaming.net/*"
         },
         {
-          "url": "https://github.com/SatanshuMishra/crowsnest*"
+          "url": "https://github.com/SatanshuMishra/crowsnest"
         }
       ]
     },

@@ -1,6 +1,6 @@
 [package]
 name = "crowsnest"
-version = "0.0.0"
+version = "1.0.0"
 description = "A fast, private, local-first match monitor for World of Warships."
 authors = ["Satanshu Mishra"]
 license = "MIT"
@@ -43,6 +43,7 @@ wowsunpack = { version = "=0.45.0", default-features = false, features = ["vfs-m
 winreg = "0.56"
 
 [dev-dependencies]
+http = "1"
 tempfile = "3"
 pickled = "=2.0.0-alpha9"
 

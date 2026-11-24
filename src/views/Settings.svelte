@@ -1,6 +1,5 @@
 <script lang="ts">
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { onMount } from "svelte";
   import About from "../components/settings/About.svelte";
   import ApplicationIdField from "../components/settings/ApplicationIdField.svelte";
   import InstallPicker from "../components/settings/InstallPicker.svelte";
@@ -10,9 +9,10 @@
   import IconButton from "../components/ui/IconButton.svelte";
   import Segmented from "../components/ui/Segmented.svelte";
   import Toggle from "../components/ui/Toggle.svelte";
+  import { focusViewHeading } from "../lib/focus";
   import { app } from "../lib/state.svelte";
   import type { Density, Highlight, HighlightStat, Region, TeamAverage, TextSize, Theme } from "../lib/types";
-  import { updates, type DownloadingState } from "../lib/updates.svelte";
+  import { updateAnnouncement, updates, type DownloadingState } from "../lib/updates.svelte";
 
   interface Choice<T extends string> {
     value: T;
@@ -72,11 +72,12 @@
     { value: "averageDamage", label: "Average damage" },
   ];
 
-  let heading = $state<HTMLHeadingElement>();
   let linkError = $state<string | null>(null);
+  let offer = $state<HTMLDivElement>();
 
   const settings = $derived(app.settings);
   const update = $derived(updates.state);
+  const updateNews = $derived(updateAnnouncement(update));
   const reportedRegion = $derived(app.snapshot?.install?.region ?? null);
   const serverDescription = $derived(
     reportedRegion
@@ -86,15 +87,16 @@
   const checkingByRequest = $derived(update.status === "checking" && !update.silent);
   const updateInProgress = $derived(update.status === "downloading" || update.status === "ready");
 
-  onMount(() => {
-    heading?.focus();
-  });
-
   function downloadLabel(download: DownloadingState): string {
     if (download.percent !== null) {
       return `${download.percent}%`;
     }
     return download.received === 0 ? "Starting…" : "Size not known";
+  }
+
+  function install() {
+    offer?.focus();
+    void updates.installUpdate();
   }
 
   function chooseServer(choice: ServerChoice) {
@@ -116,7 +118,7 @@
   <div class="column">
     <header class="header">
       <IconButton icon="back" label="Back" onclick={() => (app.view = "monitor")} />
-      <h1 tabindex="-1" bind:this={heading}>Settings</h1>
+      <h1 tabindex="-1" {@attach focusViewHeading}>Settings</h1>
     </header>
 
     {#if app.saveError}
@@ -267,8 +269,12 @@
             <p class="message success"><Icon name="check" /><span>Crowsnest is up to date.</span></p>
           {:else if update.status === "error"}
             <p class="message error"><Icon name="error" /><span>{update.message}</span></p>
-          {:else if update.status === "available"}
-            <div class="offer">
+          {/if}
+        </div>
+        <span class="visually-hidden" aria-live="polite">{updateNews}</span>
+        {#if update.status === "available" || update.status === "downloading" || update.status === "ready"}
+          <div bind:this={offer} class="offer" tabindex="-1" role="group" aria-label="Crowsnest update">
+            {#if update.status === "available"}
               <p class="message">
                 <Icon name="download" />
                 <span>Version <span class="num">{update.version}</span> is available.</span>
@@ -283,14 +289,12 @@
                 </details>
               {/if}
               <div class="actions">
-                <Button variant="primary" onclick={() => updates.installUpdate()}>
+                <Button variant="primary" onclick={install}>
                   <Icon name="download" />
                   {update.error ? "Try again" : `Install ${update.version}`}
                 </Button>
               </div>
-            </div>
-          {:else if update.status === "downloading"}
-            <div class="offer">
+            {:else if update.status === "downloading"}
               <p class="message">
                 <Icon name="download" />
                 <span>Downloading version <span class="num">{update.version}</span>…</span>
@@ -309,9 +313,7 @@
                 </div>
                 <span class="num">{downloadLabel(update)}</span>
               </div>
-            </div>
-          {:else if update.status === "ready"}
-            <div class="offer">
+            {:else if update.status === "ready"}
               <p class="message success">
                 <Icon name="check" />
                 <span>Version <span class="num">{update.version}</span> is installed. Restart Crowsnest to use it.</span>
@@ -322,9 +324,9 @@
               <div class="actions">
                 <Button variant="primary" onclick={() => updates.restart()}>Restart to update</Button>
               </div>
-            </div>
-          {/if}
-        </div>
+            {/if}
+          </div>
+        {/if}
       </SettingsSection>
 
       <SettingsSection title="About">

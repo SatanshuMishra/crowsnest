@@ -4,6 +4,7 @@ import {
   WEIGHT_CAP,
   averageName,
   averageOf,
+  awaitsShipStats,
   columnValue,
   coverageLabel,
   median,
@@ -76,6 +77,28 @@ describe("playerLines", () => {
   it("drops a ship line without battles", () => {
     expect(playerLines(loaded({ ship: line({ battles: 0 }) }), false)?.ship).toBeNull();
     expect(playerLines(loaded({ ship: null }), false)?.ship).toBeNull();
+  });
+});
+
+describe("awaitsShipStats", () => {
+  const pending = loaded({ ship: null, shipSolo: null, shipState: "pending" });
+
+  it("waits for every ship value and the personal rating built from ship stats", () => {
+    expect(awaitsShipStats(pending, "ship", "winRate")).toBe(true);
+    expect(awaitsShipStats(pending, "ship", null)).toBe(true);
+    expect(awaitsShipStats(pending, "account", "personalRating")).toBe(true);
+  });
+
+  it("shows account values that do not need ship stats", () => {
+    expect(awaitsShipStats(pending, "account", "winRate")).toBe(false);
+    expect(awaitsShipStats(pending, "account", "battles")).toBe(false);
+    expect(awaitsShipStats(pending, "account", null)).toBe(false);
+  });
+
+  it("stops waiting once ship stats arrive or are unavailable", () => {
+    expect(awaitsShipStats(loaded(), "ship", "winRate")).toBe(false);
+    expect(awaitsShipStats(loaded({ shipState: "unavailable" }), "account", "personalRating")).toBe(false);
+    expect(awaitsShipStats({ kind: "pending" }, "ship", "winRate")).toBe(false);
   });
 });
 

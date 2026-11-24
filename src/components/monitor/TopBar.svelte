@@ -2,6 +2,7 @@
   import UpdateNotice from "../UpdateNotice.svelte";
   import IconButton from "../ui/IconButton.svelte";
   import { backend } from "../../lib/backend";
+  import { focusViewHeading } from "../../lib/focus";
   import { matchType, regionLabel, regionName } from "../../lib/format";
   import { REFRESH_MIN_SPIN_MS, canRefresh, cooldownSeconds, refreshLabel } from "../../lib/refresh";
   import { app } from "../../lib/state.svelte";
@@ -86,15 +87,17 @@
 
 <header class="top-bar">
   <div class="match">
-    {#if battle}
-      <h1>
+    <h1 tabindex="-1" {@attach focusViewHeading}>
+      {#if battle}
         <span class="visually-hidden">Crowsnest, </span>{matchType(battle.arena.gameType, battle.arena.matchGroup)}
-      </h1>
+      {:else}
+        Crowsnest
+      {/if}
+    </h1>
+    {#if battle}
       {#if lastBattle}
         <span class="tag">Last battle</span>
       {/if}
-    {:else}
-      <h1>Crowsnest</h1>
     {/if}
     {#if region}
       <span class="chip" title="Game server: {regionName(region)}">{regionLabel(region)} server</span>
@@ -147,7 +150,8 @@
     align-items: baseline;
     gap: var(--space-2);
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
+    overflow-clip-margin: var(--space-1);
     white-space: nowrap;
   }
 

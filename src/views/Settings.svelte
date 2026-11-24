@@ -1,6 +1,5 @@
 <script lang="ts">
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { onMount } from "svelte";
   import About from "../components/settings/About.svelte";
   import ApplicationIdField from "../components/settings/ApplicationIdField.svelte";
   import InstallPicker from "../components/settings/InstallPicker.svelte";
@@ -10,6 +9,7 @@
   import IconButton from "../components/ui/IconButton.svelte";
   import Segmented from "../components/ui/Segmented.svelte";
   import Toggle from "../components/ui/Toggle.svelte";
+  import { focusViewHeading } from "../lib/focus";
   import { app } from "../lib/state.svelte";
   import type { Density, Highlight, HighlightStat, Region, TeamAverage, TextSize, Theme } from "../lib/types";
   import { updateAnnouncement, updates, type DownloadingState } from "../lib/updates.svelte";
@@ -72,7 +72,6 @@
     { value: "averageDamage", label: "Average damage" },
   ];
 
-  let heading = $state<HTMLHeadingElement>();
   let linkError = $state<string | null>(null);
 
   const settings = $derived(app.settings);
@@ -86,10 +85,6 @@
   );
   const checkingByRequest = $derived(update.status === "checking" && !update.silent);
   const updateInProgress = $derived(update.status === "downloading" || update.status === "ready");
-
-  onMount(() => {
-    heading?.focus();
-  });
 
   function downloadLabel(download: DownloadingState): string {
     if (download.percent !== null) {
@@ -117,7 +112,7 @@
   <div class="column">
     <header class="header">
       <IconButton icon="back" label="Back" onclick={() => (app.view = "monitor")} />
-      <h1 tabindex="-1" bind:this={heading}>Settings</h1>
+      <h1 tabindex="-1" {@attach focusViewHeading}>Settings</h1>
     </header>
 
     {#if app.saveError}

@@ -134,6 +134,7 @@ export interface Snapshot {
 export type Theme = "system" | "dark" | "light";
 export type Density = "comfortable" | "compact";
 export type TextSize = "small" | "normal" | "large";
+export type Palette = "muted" | "vibrant" | "friendly";
 export type Highlight = "none" | "edge" | "fill";
 export type HighlightStat = "personalRating" | "shipWinRate" | "accountWinRate" | "averageDamage";
 export type TeamAverage = "mean" | "weighted" | "median";
@@ -146,6 +147,7 @@ export interface Settings {
   theme: Theme;
   density: Density;
   textSize: TextSize;
+  palette: Palette;
   coloredValues: boolean;
   highlight: Highlight;
   highlightStat: HighlightStat;
@@ -155,6 +157,7 @@ export interface Settings {
   alwaysOnTop: boolean;
   closeToTray: boolean;
   checkForUpdates: boolean;
+  introSeen: number | null;
 }
 
 export interface AppInfo {

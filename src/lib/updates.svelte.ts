@@ -123,6 +123,19 @@ export function reduceUpdate(state: UpdateState, action: UpdateAction): UpdateSt
   }
 }
 
+export function updateAnnouncement(state: UpdateState): string {
+  switch (state.status) {
+    case "available":
+      return state.error ? "The update could not be installed. Try again." : `Crowsnest ${state.version} is available.`;
+    case "downloading":
+      return `Downloading Crowsnest ${state.version}.`;
+    case "ready":
+      return state.error ?? `Crowsnest ${state.version} is installed. Restart to update.`;
+    default:
+      return "";
+  }
+}
+
 function offerFrom(update: Update | null): UpdateOffer | null {
   if (!update) {
     return null;

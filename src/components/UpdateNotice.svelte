@@ -1,26 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { updates } from "../lib/updates.svelte";
+  import { updateAnnouncement, updates } from "../lib/updates.svelte";
   import Button from "./ui/Button.svelte";
   import Icon from "./ui/Icon.svelte";
   import IconButton from "./ui/IconButton.svelte";
 
   const update = $derived(updates.state);
-
-  const announcement = $derived.by(() => {
-    switch (update.status) {
-      case "available":
-        return update.error
-          ? "The update could not be installed. Try again."
-          : `Crowsnest ${update.version} is available.`;
-      case "downloading":
-        return `Downloading Crowsnest ${update.version}.`;
-      case "ready":
-        return update.error ?? `Crowsnest ${update.version} is installed. Restart to update.`;
-      default:
-        return "";
-    }
-  });
+  const announcement = $derived(updateAnnouncement(update));
 
   onMount(() => {
     updates.startAutomaticCheck();

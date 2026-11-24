@@ -31,7 +31,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "publisher": "Satanshu Mishra",
     "copyright": "Copyright (c) 2026 Satanshu Mishra. MIT License.",
     "homepage": "https://github.com/SatanshuMishra/crowsnest",
@@ -59,6 +59,7 @@
       "endpoints": [
         "https://github.com/SatanshuMishra/crowsnest/releases/latest/download/latest.json"
       ],
+      "requireSignedVersion": true,
       "windows": { "installMode": "passive" }
     }
   }

@@ -30,7 +30,7 @@ export function validateApplicationId(input: string): ApplicationIdCheck {
   return { ok: true, value };
 }
 
-export type VerifyFailureKind = "rejected" | "rateLimited" | "network" | "unexpected";
+export type VerifyFailureKind = "rejected" | "blocked" | "rateLimited" | "network" | "unexpected";
 
 export interface VerifyFailure {
   kind: VerifyFailureKind;
@@ -40,6 +40,8 @@ export interface VerifyFailure {
 const verifyFailureMessages: Record<VerifyFailureKind, string> = {
   rejected:
     "Wargaming did not accept this ID. Copy it again from your Standalone application on developers.wargaming.net.",
+  blocked:
+    "Wargaming has blocked this ID. Create a new Standalone application on developers.wargaming.net and use its ID.",
   rateLimited: "Wargaming is limiting requests right now. Wait a minute, then try again.",
   network: "Crowsnest could not reach Wargaming. Check your internet connection, then try again.",
   unexpected: "Wargaming sent an answer Crowsnest did not expect. Try again in a few minutes.",
@@ -48,6 +50,9 @@ const verifyFailureMessages: Record<VerifyFailureKind, string> = {
 function verifyFailureKind(reason: string): VerifyFailureKind {
   if (reason.includes("rejected")) {
     return "rejected";
+  }
+  if (reason.includes("blocked")) {
+    return "blocked";
   }
   if (reason.includes("rate limit")) {
     return "rateLimited";

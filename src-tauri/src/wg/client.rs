@@ -35,6 +35,8 @@ const SHIP_FIELDS: &str = "ship_id,name,tier,type,nation,is_premium,is_special";
 pub enum WgError {
     #[error("the Wargaming application ID was rejected")]
     InvalidApplicationId,
+    #[error("Wargaming has blocked this application ID")]
+    ApplicationBlocked,
     #[error("Wargaming is rate limiting requests; try again shortly")]
     RateLimited,
     #[error("Wargaming returned an error: {code} {message}")]
@@ -463,6 +465,7 @@ fn api_error(error: ApiErrorBody) -> WgError {
     let message = error.message.unwrap_or_default();
     match message.as_str() {
         "INVALID_APPLICATION_ID" | "APPLICATION_ID_NOT_SPECIFIED" => WgError::InvalidApplicationId,
+        "APPLICATION_IS_BLOCKED" => WgError::ApplicationBlocked,
         "REQUEST_LIMIT_EXCEEDED" => WgError::RateLimited,
         _ => WgError::Api {
             code: error.code.unwrap_or_default(),
@@ -751,6 +754,14 @@ mod tests {
                 Err(WgError::InvalidApplicationId)
             );
         }
+    }
+
+    #[test]
+    fn a_blocked_application_maps_to_application_blocked() {
+        assert_eq!(
+            decode_envelope(error_body(407, "APPLICATION_IS_BLOCKED").as_bytes()),
+            Err(WgError::ApplicationBlocked)
+        );
     }
 
     #[test]

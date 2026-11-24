@@ -64,11 +64,11 @@ To build with an application id baked in, set `CROWSNEST_WG_APPLICATION_ID` befo
 
 ## Credits
 
-- Statistics: Wargaming public API. World of Warships and all related names are trademarks of Wargaming.net. (c) Wargaming.net. All rights reserved. Crowsnest is not affiliated with or endorsed by Wargaming.
+- Statistics: Wargaming public API. World of Warships and all related names are trademarks of Wargaming.net. © Wargaming.net. All rights reserved. Crowsnest is not affiliated with or endorsed by Wargaming.
 - Personal rating formula and expected values: [WoWS Numbers](https://wows-numbers.com/).
 - Install detection approach informed by [wows-toolkit](https://github.com/landaire/wows-toolkit) (MIT).
 - Crowsnest is an independent, clean-room reimplementation of the idea behind wows-monitor. No code from wows-monitor was used.
 
 ## License
 
-[MIT](LICENSE)
+[Apache License 2.0](LICENSE). Copyright 2026 Satanshu Mishra. Version 1.0.0 was released under the MIT License.

@@ -106,12 +106,20 @@ impl Default for Settings {
 
 impl Settings {
     pub fn effective_application_id(&self) -> Option<String> {
+        self.own_application_id()
+            .map(str::to_owned)
+            .or_else(|| bundled_application_id().map(str::to_owned))
+    }
+
+    pub fn has_own_application_id(&self) -> bool {
+        self.own_application_id().is_some()
+    }
+
+    fn own_application_id(&self) -> Option<&str> {
         self.application_id
             .as_deref()
             .map(str::trim)
             .filter(|id| !id.is_empty())
-            .map(str::to_owned)
-            .or_else(|| bundled_application_id().map(str::to_owned))
     }
 }
 
@@ -222,6 +230,20 @@ mod tests {
         assert_eq!(
             settings.effective_application_id().as_deref(),
             bundled_application_id()
+        );
+        assert!(!settings.has_own_application_id());
+    }
+
+    #[test]
+    fn a_user_application_id_counts_as_their_own() {
+        let settings = Settings {
+            application_id: Some(" 0123456789abcdef0123456789abcdef ".into()),
+            ..Settings::default()
+        };
+        assert!(settings.has_own_application_id());
+        assert_eq!(
+            settings.effective_application_id().as_deref(),
+            Some("0123456789abcdef0123456789abcdef")
         );
     }
 }

@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "description": "A fast, private, local-first match monitor for World of Warships.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

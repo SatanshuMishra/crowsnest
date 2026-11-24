@@ -227,7 +227,12 @@ impl StatLine {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "kind")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "kind"
+)]
+#[allow(clippy::large_enum_variant)]
 pub enum PlayerStats {
     Pending,
     Bot,
@@ -345,5 +350,34 @@ impl Snapshot {
             battle: None,
             notice: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn player_stats_fields_are_camel_case_on_the_wire() {
+        let line = StatLine::from_totals(Totals::default(), None);
+        let loaded = PlayerStats::Loaded {
+            account_id: 7,
+            overall: line,
+            overall_solo: None,
+            ship: None,
+            ship_solo: None,
+            created_at: None,
+        };
+        let json = serde_json::to_value(&loaded).unwrap();
+        assert_eq!(json["kind"], "loaded");
+        assert_eq!(json["accountId"], 7);
+        assert!(json.get("overallSolo").is_some());
+        assert!(json.get("shipSolo").is_some());
+        assert!(json.get("createdAt").is_some());
+        let hidden = serde_json::to_value(PlayerStats::Hidden { account_id: 3 }).unwrap();
+        assert_eq!(hidden["kind"], "hidden");
+        assert_eq!(hidden["accountId"], 3);
+        let not_found = serde_json::to_value(PlayerStats::NotFound).unwrap();
+        assert_eq!(not_found["kind"], "notFound");
     }
 }

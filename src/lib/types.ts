@@ -56,6 +56,8 @@ export interface StatLine {
   personalRating: number | null;
 }
 
+export type ShipStatsState = "pending" | "ready" | "unavailable";
+
 export type PlayerStats =
   | { kind: "pending" }
   | { kind: "bot" }
@@ -69,8 +71,15 @@ export type PlayerStats =
       overallSolo: StatLine | null;
       ship: StatLine | null;
       shipSolo: StatLine | null;
+      shipState: ShipStatsState;
       createdAt: number | null;
     };
+
+export interface ExpectedStats {
+  damage: number;
+  frags: number;
+  winRate: number;
+}
 
 export interface Player {
   name: string;
@@ -78,6 +87,7 @@ export interface Player {
   clanTag: string | null;
   ship: Ship | null;
   shipId: number;
+  expected: ExpectedStats | null;
   division: number | null;
   stats: PlayerStats;
 }

@@ -226,6 +226,14 @@ impl StatLine {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ShipStatsState {
+    Pending,
+    Ready,
+    Unavailable,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
     rename_all = "camelCase",
@@ -249,6 +257,7 @@ pub enum PlayerStats {
         overall_solo: Option<StatLine>,
         ship: Option<StatLine>,
         ship_solo: Option<StatLine>,
+        ship_state: ShipStatsState,
         created_at: Option<i64>,
     },
 }
@@ -366,6 +375,7 @@ mod tests {
             overall_solo: None,
             ship: None,
             ship_solo: None,
+            ship_state: ShipStatsState::Unavailable,
             created_at: None,
         };
         let json = serde_json::to_value(&loaded).unwrap();
@@ -374,6 +384,7 @@ mod tests {
         assert!(json.get("overallSolo").is_some());
         assert!(json.get("shipSolo").is_some());
         assert!(json.get("createdAt").is_some());
+        assert_eq!(json["shipState"], "unavailable");
         let hidden = serde_json::to_value(PlayerStats::Hidden { account_id: 3 }).unwrap();
         assert_eq!(hidden["kind"], "hidden");
         assert_eq!(hidden["accountId"], 3);

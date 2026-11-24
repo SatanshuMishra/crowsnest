@@ -1,0 +1,45 @@
+{
+  "status": "ok",
+  "meta": {
+    "count": 4
+  },
+  "data": {
+    "500100001": {
+      "account_id": 500100001,
+      "account_name": "Harbor_Pilot",
+      "clan_id": 500200001,
+      "joined_at": 1546300800,
+      "role": "commander",
+      "clan": {
+        "clan_id": 500200001,
+        "created_at": 1514764800,
+        "members_count": 42,
+        "name": "Gull Squadron",
+        "tag": "GULL"
+      }
+    },
+    "500100002": {
+      "account_id": 500100002,
+      "account_name": "quiet_gull",
+      "clan_id": null,
+      "joined_at": null,
+      "role": null,
+      "clan": null
+    },
+    "500100003": {
+      "account_id": 500100003,
+      "account_name": "TideWatcher_77",
+      "clan_id": 500200002,
+      "joined_at": 1609459200,
+      "role": "private",
+      "clan": {
+        "clan_id": 500200002,
+        "created_at": 1577836800,
+        "members_count": 7,
+        "name": "Night Ferry",
+        "tag": "-NF-"
+      }
+    },
+    "500100004": null
+  }
+}

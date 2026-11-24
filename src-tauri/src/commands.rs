@@ -32,7 +32,7 @@ pub async fn save_settings(
         .save(&settings)
         .map_err(|error| error.to_string())?;
     shell::apply_window_preferences(&app, &settings);
-    state.monitor.reconfigure(settings.clone());
+    state.monitor.apply_settings(settings.clone());
     Ok(settings)
 }
 
@@ -44,12 +44,20 @@ pub async fn detect_installs() -> Vec<GameInstall> {
 }
 
 #[tauri::command]
-pub async fn inspect_install(path: String) -> Result<GameInstall, String> {
+pub async fn inspect_install(path: String) -> Result<GameInstall, &'static str> {
     let root = PathBuf::from(path);
     tauri::async_runtime::spawn_blocking(move || install::inspect(&root, InstallSource::Manual))
         .await
-        .map_err(|error| error.to_string())?
-        .map_err(|error| error.to_string())
+        .map_err(|_| "unavailable")?
+        .map_err(|error| install_problem(&error))
+}
+
+fn install_problem(error: &install::InstallError) -> &'static str {
+    match error {
+        install::InstallError::Missing => "missing",
+        install::InstallError::NotAGameFolder => "notAGameFolder",
+        install::InstallError::NoBuild => "noBuild",
+    }
 }
 
 #[tauri::command]

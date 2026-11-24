@@ -700,6 +700,7 @@ name = "crowsnest"
 version = "0.0.0"
 dependencies = [
  "futures",
+ "http",
  "log",
  "notify",
  "notify-debouncer-full",

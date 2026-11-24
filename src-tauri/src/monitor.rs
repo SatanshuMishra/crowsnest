@@ -1,17 +1,18 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures::stream::{self, StreamExt};
+use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter};
 
 use crate::arena::watch::{ArenaEvent, ArenaWatcher};
-use crate::game::install;
+use crate::game::{config, install};
 use crate::model::{
     ArenaInfo, ArenaVehicle, Battle, GameInstall, InstallSource, Notice, NoticeLevel, Phase,
-    Player, PlayerStats, Region, Snapshot, StatLine, Team, Totals,
+    Player, PlayerStats, Region, ShipStatsState, Snapshot, StatLine, Team, Totals,
 };
 use crate::rating::expected::ExpectedValues;
 use crate::rating::pr;
@@ -21,6 +22,10 @@ use crate::wg::client::{AccountRecord, ShipRecord, WgClient, WgError};
 
 pub const SNAPSHOT_EVENT: &str = "snapshot";
 const SHIP_STATS_CONCURRENCY: usize = 4;
+const EXPECTED_VALUES_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
+const EXPECTED_VALUES_RETRY_AFTER: Duration = Duration::from_secs(10 * 60);
+const SUPERVISE_INTERVAL: Duration = Duration::from_secs(5);
+const INSTALL_CHECK_EVERY: u64 = 12;
 
 pub fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -31,6 +36,44 @@ pub fn http_client() -> reqwest::Client {
         .unwrap_or_default()
 }
 
+#[derive(Default)]
+struct CatalogCache {
+    game_version: Option<String>,
+    ships: ShipCatalog,
+}
+
+#[derive(Clone)]
+enum ExpectedCache {
+    Empty,
+    Loaded { values: ExpectedValues, at: Instant },
+    Failed { at: Instant },
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ExpectedPlan {
+    Reuse,
+    Download,
+    SkipAfterFailure,
+}
+
+fn expected_plan(cache: &ExpectedCache, now: Instant) -> ExpectedPlan {
+    match cache {
+        ExpectedCache::Loaded { at, .. } if now.duration_since(*at) < EXPECTED_VALUES_MAX_AGE => {
+            ExpectedPlan::Reuse
+        }
+        ExpectedCache::Failed { at } if now.duration_since(*at) < EXPECTED_VALUES_RETRY_AFTER => {
+            ExpectedPlan::SkipAfterFailure
+        }
+        _ => ExpectedPlan::Download,
+    }
+}
+
+struct SharedClient {
+    region: Region,
+    application_id: String,
+    client: WgClient,
+}
+
 struct Shared {
     app: AppHandle,
     http: reqwest::Client,
@@ -38,9 +81,13 @@ struct Shared {
     snapshot: Mutex<Snapshot>,
     settings: Mutex<Settings>,
     watcher: Mutex<Option<ArenaWatcher>>,
+    attachment: AtomicU64,
     generation: AtomicU64,
-    catalog: tokio::sync::Mutex<ShipCatalog>,
-    expected: tokio::sync::Mutex<Option<ExpectedValues>>,
+    battle_live: AtomicBool,
+    load_task: Mutex<Option<JoinHandle<()>>>,
+    client: Mutex<Option<SharedClient>>,
+    catalog: tokio::sync::Mutex<CatalogCache>,
+    expected: tokio::sync::Mutex<ExpectedCache>,
 }
 
 #[derive(Clone)]
@@ -59,9 +106,13 @@ impl Monitor {
             snapshot: Mutex::new(Snapshot::initial()),
             settings: Mutex::new(settings),
             watcher: Mutex::new(None),
+            attachment: AtomicU64::new(0),
             generation: AtomicU64::new(0),
-            catalog: tokio::sync::Mutex::new(ShipCatalog::default()),
-            expected: tokio::sync::Mutex::new(None),
+            battle_live: AtomicBool::new(false),
+            load_task: Mutex::new(None),
+            client: Mutex::new(None),
+            catalog: tokio::sync::Mutex::new(CatalogCache::default()),
+            expected: tokio::sync::Mutex::new(ExpectedCache::Empty),
         }))
     }
 
@@ -79,11 +130,22 @@ impl Monitor {
 
     pub fn reconfigure(&self, settings: Settings) {
         *lock(&self.0.settings) = settings.clone();
+        let attachment = self.0.attachment.fetch_add(1, Ordering::SeqCst) + 1;
         lock(&self.0.watcher).take();
         self.0.generation.fetch_add(1, Ordering::SeqCst);
+        self.0.battle_live.store(false, Ordering::SeqCst);
+        self.abort_load();
 
         let monitor = self.clone();
-        tauri::async_runtime::spawn_blocking(move || monitor.attach(settings));
+        tauri::async_runtime::spawn_blocking(move || monitor.attach(settings, attachment));
+    }
+
+    pub fn apply_settings(&self, settings: Settings) {
+        if needs_reattach(&self.settings(), &settings) {
+            self.reconfigure(settings);
+        } else {
+            *lock(&self.0.settings) = settings;
+        }
     }
 
     pub fn refresh(&self) {
@@ -93,13 +155,20 @@ impl Monitor {
         }
     }
 
-    fn attach(&self, settings: Settings) {
+    fn is_attachment(&self, attachment: u64) -> bool {
+        self.0.attachment.load(Ordering::SeqCst) == attachment
+    }
+
+    fn attach(&self, settings: Settings, attachment: u64) {
         let (install, install_notice) = resolve_install(&settings);
         let Some(install) = install else {
-            self.publish(Snapshot {
-                notice: install_notice,
-                ..Snapshot::initial()
-            });
+            self.update_if(
+                || self.is_attachment(attachment),
+                |_| Snapshot {
+                    notice: install_notice,
+                    ..Snapshot::initial()
+                },
+            );
             return;
         };
 
@@ -114,34 +183,99 @@ impl Monitor {
         } else {
             Phase::Waiting
         };
-        self.publish(Snapshot {
-            phase,
-            install: Some(install),
-            battle: None,
-            notice: install_notice,
-        });
+        self.update_if(
+            || self.is_attachment(attachment),
+            |_| Snapshot {
+                phase,
+                install: Some(install.clone()),
+                battle: None,
+                notice: install_notice,
+            },
+        );
         if phase != Phase::Waiting {
             return;
         }
+        self.supervise(attachment, watch_root(&replays_dir), install);
+    }
 
+    fn supervise(&self, attachment: u64, root: PathBuf, install: GameInstall) {
         let monitor = self.clone();
-        match ArenaWatcher::start(replays_dir, move |event| monitor.on_arena(event)) {
-            Ok(watcher) => *lock(&self.0.watcher) = Some(watcher),
+        tauri::async_runtime::spawn(async move {
+            let mut watching = monitor.watch(&root, attachment);
+            for tick in 1u64.. {
+                tokio::time::sleep(SUPERVISE_INTERVAL).await;
+                if !monitor.is_attachment(attachment) {
+                    return;
+                }
+                if watching == WatchState::FolderMissing && root.is_dir() {
+                    watching = monitor.watch(&root, attachment);
+                }
+                let idle = !monitor.0.battle_live.load(Ordering::SeqCst);
+                if tick % INSTALL_CHECK_EVERY == 0 && idle && install_moved(&install).await {
+                    log::info!("the game installation changed; attaching again");
+                    monitor.reconfigure(monitor.settings());
+                    return;
+                }
+            }
+        });
+    }
+
+    fn watch(&self, root: &Path, attachment: u64) -> WatchState {
+        if !root.is_dir() {
+            let message = format!(
+                "Waiting for the replays folder {} to appear. The game creates it when your first battle starts.",
+                root.display()
+            );
+            self.update_if(
+                || self.is_attachment(attachment),
+                |snapshot| Snapshot {
+                    notice: Some(notice(NoticeLevel::Info, message)),
+                    ..snapshot
+                },
+            );
+            return WatchState::FolderMissing;
+        }
+        let monitor = self.clone();
+        match ArenaWatcher::start(root.to_path_buf(), move |event| monitor.on_arena(event)) {
+            Ok(watcher) => {
+                let mut slot = lock(&self.0.watcher);
+                if self.is_attachment(attachment) {
+                    *slot = Some(watcher);
+                }
+                drop(slot);
+                self.update_if(
+                    || self.is_attachment(attachment),
+                    |snapshot| Snapshot {
+                        notice: snapshot
+                            .notice
+                            .filter(|notice| notice.level != NoticeLevel::Info),
+                        ..snapshot
+                    },
+                );
+                WatchState::Watching
+            }
             Err(error) => {
                 log::warn!("arena watcher failed to start: {error}");
-                self.update(|snapshot| Snapshot {
-                    notice: Some(notice(NoticeLevel::Error, error.to_string())),
-                    ..snapshot
-                });
+                self.update_if(
+                    || self.is_attachment(attachment),
+                    |snapshot| Snapshot {
+                        notice: Some(notice(NoticeLevel::Error, error.to_string())),
+                        ..snapshot
+                    },
+                );
+                WatchState::Failed
             }
         }
     }
 
     fn on_arena(&self, event: ArenaEvent) {
         match event {
-            ArenaEvent::Started(arena) => self.begin_battle(arena),
+            ArenaEvent::Started(arena) => {
+                self.0.battle_live.store(true, Ordering::SeqCst);
+                self.begin_battle(arena);
+            }
             ArenaEvent::Ended => {
-                self.0.generation.fetch_add(1, Ordering::SeqCst);
+                self.0.battle_live.store(false, Ordering::SeqCst);
                 self.update(|snapshot| Snapshot {
                     phase: Phase::Waiting,
                     ..snapshot
@@ -155,11 +289,12 @@ impl Monitor {
         let Some(application_id) = settings.effective_application_id() else {
             return;
         };
+        self.abort_load();
         let generation = self.0.generation.fetch_add(1, Ordering::SeqCst) + 1;
-        let install_region = lock(&self.0.snapshot)
-            .install
+        let install = lock(&self.0.snapshot).install.clone();
+        let install_region = install
             .as_ref()
-            .and_then(|install| install.region);
+            .and_then(|install| config::active_region(&install.root).or(install.region));
         let region = settings.region_override.or(install_region);
         let region_notice = region.is_none().then(|| {
             notice(
@@ -182,20 +317,56 @@ impl Monitor {
                 }
             },
         );
+        let live = self.0.battle_live.load(Ordering::SeqCst);
         self.update(|snapshot| Snapshot {
-            phase: Phase::Loading,
+            phase: if live { Phase::Loading } else { snapshot.phase },
+            install: snapshot.install.map(|install| GameInstall {
+                region: install_region.or(install.region),
+                ..install
+            }),
             battle: Some(placeholder),
             notice: region_notice.clone(),
-            ..snapshot
         });
 
+        let client = self.client_for(region, application_id);
         let monitor = self.clone();
-        tauri::async_runtime::spawn(async move {
-            let client = WgClient::new(monitor.0.http.clone(), region, application_id);
+        let task = tauri::async_runtime::spawn(async move {
             monitor
                 .load_battle(generation, client, arena, region_notice)
                 .await;
         });
+        *lock(&self.0.load_task) = Some(task);
+    }
+
+    fn abort_load(&self) {
+        if let Some(task) = lock(&self.0.load_task).take() {
+            task.abort();
+        }
+    }
+
+    fn client_for(&self, region: Region, application_id: String) -> WgClient {
+        let mut slot = lock(&self.0.client);
+        let reusable = slot
+            .as_ref()
+            .filter(|shared| shared.region == region && shared.application_id == application_id)
+            .map(|shared| shared.client.clone());
+        reusable.unwrap_or_else(|| {
+            let client = WgClient::new(self.0.http.clone(), region, application_id.clone());
+            *slot = Some(SharedClient {
+                region,
+                application_id,
+                client: client.clone(),
+            });
+            client
+        })
+    }
+
+    fn settled_phase(&self) -> Phase {
+        if self.0.battle_live.load(Ordering::SeqCst) {
+            Phase::InBattle
+        } else {
+            Phase::Waiting
+        }
     }
 
     fn is_current(&self, generation: u64) -> bool {
@@ -213,6 +384,7 @@ impl Monitor {
         let ship_ids: Vec<u64> = arena
             .vehicles
             .iter()
+            .filter(|vehicle| !vehicle.is_bot())
             .map(|vehicle| vehicle.ship_id)
             .collect();
         let catalog = self.ships(&client, &arena.client_version, &ship_ids).await;
@@ -233,37 +405,34 @@ impl Monitor {
                         }
                     }
                 });
-                if self.is_current(generation) {
-                    self.update(|snapshot| Snapshot {
-                        phase: Phase::InBattle,
-                        battle: Some(failed),
-                        notice: Some(notice(NoticeLevel::Error, reason.clone())),
-                        ..snapshot
-                    });
-                }
+                let phase = self.settled_phase();
+                self.update_current(generation, |snapshot| Snapshot {
+                    phase,
+                    battle: Some(failed),
+                    notice: Some(notice(NoticeLevel::Error, reason.clone())),
+                    ..snapshot
+                });
                 return;
             }
         };
 
         let early = with_clans(
             assemble_battle(&arena, Some(region), &catalog, None, |vehicle| {
-                roster.stats_for(vehicle, &HashMap::new(), None)
+                roster.stats_for(vehicle, None, None)
             }),
             &roster,
         );
-        if !self.is_current(generation) {
-            return;
-        }
-        self.update(|snapshot| Snapshot {
+        self.update_current(generation, |snapshot| Snapshot {
             battle: Some(early),
             ..snapshot
         });
 
-        let (expected, expected_notice) = self.expected_values().await;
-        let ship_records = fetch_ship_records(&client, &roster).await;
+        let ((expected, expected_notice), ship_records) =
+            futures::join!(self.expected_values(), fetch_ship_records(&client, &roster));
         if !self.is_current(generation) {
             return;
         }
+        let ship_notice = ship_stats_notice(&roster, &ship_records);
 
         let complete = with_clans(
             assemble_battle(
@@ -271,61 +440,91 @@ impl Monitor {
                 Some(region),
                 &catalog,
                 expected.as_ref(),
-                |vehicle| roster.stats_for(vehicle, &ship_records, expected.as_ref()),
+                |vehicle| roster.stats_for(vehicle, Some(&ship_records), expected.as_ref()),
             ),
             &roster,
         );
-        self.update(|snapshot| Snapshot {
-            phase: Phase::InBattle,
+        let phase = self.settled_phase();
+        self.update_current(generation, |snapshot| Snapshot {
+            phase,
             battle: Some(complete),
-            notice: region_notice.clone().or(expected_notice.clone()),
+            notice: region_notice
+                .clone()
+                .or(ship_notice.clone())
+                .or(expected_notice.clone()),
             ..snapshot
         });
     }
 
     async fn ships(&self, client: &WgClient, game_version: &str, required: &[u64]) -> ShipCatalog {
         let mut cached = self.0.catalog.lock().await;
-        let complete = required.iter().all(|id| cached.get(*id).is_some());
-        if complete && !cached.is_empty() {
-            return cached.clone();
+        let same_version = cached.game_version.as_deref() == Some(game_version);
+        if same_version && !cached.ships.is_empty() {
+            return cached.ships.clone();
         }
         match ShipCatalog::load(&self.0.cache_dir, client, game_version, required).await {
             Ok(catalog) => {
-                *cached = catalog.clone();
+                *cached = CatalogCache {
+                    game_version: Some(game_version.to_owned()),
+                    ships: catalog.clone(),
+                };
                 catalog
             }
             Err(error) => {
                 log::warn!("ship catalog unavailable: {error}");
-                cached.clone()
+                cached.ships.clone()
             }
         }
     }
 
     async fn expected_values(&self) -> (Option<ExpectedValues>, Option<Notice>) {
+        let unavailable = || {
+            let message = "Personal rating is unavailable because the expected values could not be downloaded.";
+            Some(notice(NoticeLevel::Warning, message.into()))
+        };
         let mut cached = self.0.expected.lock().await;
-        if let Some(values) = cached.as_ref() {
-            return (Some(values.clone()), None);
+        let now = Instant::now();
+        match (expected_plan(&cached, now), cached.clone()) {
+            (ExpectedPlan::Reuse, ExpectedCache::Loaded { values, .. }) => {
+                return (Some(values), None);
+            }
+            (ExpectedPlan::SkipAfterFailure, _) => return (None, unavailable()),
+            _ => {}
         }
         match ExpectedValues::load(&self.0.cache_dir, &self.0.http).await {
             Ok(values) => {
-                *cached = Some(values.clone());
+                *cached = ExpectedCache::Loaded {
+                    values: values.clone(),
+                    at: now,
+                };
                 (Some(values), None)
             }
             Err(error) => {
                 log::warn!("expected values unavailable: {error}");
-                let message = "Personal rating is unavailable because the expected values could not be downloaded.";
-                (None, Some(notice(NoticeLevel::Warning, message.into())))
+                *cached = ExpectedCache::Failed { at: now };
+                (None, unavailable())
             }
         }
     }
 
-    fn publish(&self, snapshot: Snapshot) {
-        self.update(|_| snapshot);
+    fn update(&self, change: impl FnOnce(Snapshot) -> Snapshot) {
+        self.update_if(|| true, change);
     }
 
-    fn update(&self, change: impl FnOnce(Snapshot) -> Snapshot) {
+    fn update_current(&self, generation: u64, change: impl FnOnce(Snapshot) -> Snapshot) {
+        self.update_if(|| self.is_current(generation), change);
+    }
+
+    fn update_if(
+        &self,
+        still_wanted: impl FnOnce() -> bool,
+        change: impl FnOnce(Snapshot) -> Snapshot,
+    ) {
         let next = {
             let mut guard = lock(&self.0.snapshot);
+            if !still_wanted() {
+                return;
+            }
             let next = change(guard.clone());
             *guard = next.clone();
             next
@@ -338,6 +537,32 @@ impl Monitor {
 
 fn notice(level: NoticeLevel, message: String) -> Notice {
     Notice { level, message }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WatchState {
+    Watching,
+    FolderMissing,
+    Failed,
+}
+
+fn needs_reattach(current: &Settings, next: &Settings) -> bool {
+    current.install_path != next.install_path
+        || current.replays_dir_override != next.replays_dir_override
+        || current.effective_application_id() != next.effective_application_id()
+}
+
+async fn install_moved(install: &GameInstall) -> bool {
+    let root = install.root.clone();
+    let source = install.source;
+    let fresh = tauri::async_runtime::spawn_blocking(move || install::inspect(&root, source)).await;
+    match fresh {
+        Ok(Ok(fresh)) => {
+            fresh.replays_dir != install.replays_dir
+                || fresh.replays_enabled != install.replays_enabled
+        }
+        _ => false,
+    }
 }
 
 fn resolve_install(settings: &Settings) -> (Option<GameInstall>, Option<Notice>) {
@@ -377,7 +602,7 @@ impl Roster {
     fn stats_for(
         &self,
         vehicle: &ArenaVehicle,
-        ships: &HashMap<u64, Vec<ShipRecord>>,
+        ships: Option<&HashMap<u64, Vec<ShipRecord>>>,
         expected: Option<&ExpectedValues>,
     ) -> PlayerStats {
         if vehicle.is_bot() {
@@ -391,7 +616,12 @@ impl Roster {
                 account_id: account.account_id,
             };
         };
-        let records = ships.get(&account.account_id);
+        let records = ships.and_then(|ships| ships.get(&account.account_id));
+        let ship_state = match (ships, records) {
+            (None, _) => ShipStatsState::Pending,
+            (Some(_), Some(_)) => ShipStatsState::Ready,
+            (Some(_), None) => ShipStatsState::Unavailable,
+        };
         let overall_rating = expected.zip(records).and_then(|(expected, records)| {
             let per_ship: Vec<(u64, Totals)> = records
                 .iter()
@@ -426,6 +656,7 @@ impl Roster {
             ship_solo: ship_record
                 .and_then(|record| record.pvp_solo)
                 .map(ship_line),
+            ship_state,
             created_at: account.created_at,
         }
     }
@@ -478,6 +709,24 @@ async fn fetch_ship_records(client: &WgClient, roster: &Roster) -> HashMap<u64, 
         })
         .collect()
         .await
+}
+
+fn ship_stats_notice(roster: &Roster, fetched: &HashMap<u64, Vec<ShipRecord>>) -> Option<Notice> {
+    let missing = roster
+        .accounts
+        .values()
+        .filter(|account| !account.hidden && account.pvp.is_some())
+        .filter(|account| !fetched.contains_key(&account.account_id))
+        .count();
+    let players = if missing == 1 { "player" } else { "players" };
+    (missing > 0).then(|| {
+        notice(
+            NoticeLevel::Warning,
+            format!(
+                "Wargaming did not return ship statistics for {missing} {players}. Press Refresh to try again."
+            ),
+        )
+    })
 }
 
 fn with_clans(battle: Battle, roster: &Roster) -> Battle {
@@ -552,6 +801,25 @@ fn sorted(players: Vec<Player>) -> Vec<Player> {
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
     ordered
+}
+
+fn is_version_folder(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            name.contains('.')
+                && name
+                    .split('.')
+                    .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        })
+}
+
+fn watch_root(replays_dir: &Path) -> PathBuf {
+    replays_dir
+        .parent()
+        .filter(|_| is_version_folder(replays_dir))
+        .unwrap_or(replays_dir)
+        .to_path_buf()
 }
 
 #[cfg(test)]
@@ -676,14 +944,13 @@ mod tests {
             )]),
             clans: HashMap::new(),
         };
-        let stats = roster.stats_for(&vehicle("Shy", Relation::Enemy, 1), &HashMap::new(), None);
+        let stats = roster.stats_for(&vehicle("Shy", Relation::Enemy, 1), None, None);
         assert_eq!(stats, PlayerStats::Hidden { account_id: 7 });
     }
 
     #[test]
     fn a_name_wargaming_does_not_know_is_reported_as_not_found() {
-        let stats =
-            empty_roster().stats_for(&vehicle("Ghost", Relation::Ally, 1), &HashMap::new(), None);
+        let stats = empty_roster().stats_for(&vehicle("Ghost", Relation::Ally, 1), None, None);
         assert_eq!(stats, PlayerStats::NotFound);
     }
 
@@ -695,10 +962,7 @@ mod tests {
             relation: Relation::Enemy,
             ship_id: 1,
         };
-        assert_eq!(
-            empty_roster().stats_for(&bot, &HashMap::new(), None),
-            PlayerStats::Bot
-        );
+        assert_eq!(empty_roster().stats_for(&bot, None, None), PlayerStats::Bot);
     }
 
     #[test]
@@ -717,5 +981,146 @@ mod tests {
         );
         let tagged = with_clans(battle, &roster);
         assert_eq!(tagged.allies.players[0].clan_tag.as_deref(), Some("NEST"));
+    }
+
+    #[test]
+    fn versioned_replays_folders_are_watched_from_their_parent() {
+        let base = Path::new("C:/Games/World_of_Warships/replays");
+        assert_eq!(watch_root(&base.join("15.10.0.0")), base);
+        assert_eq!(watch_root(base), base);
+        assert_eq!(
+            watch_root(Path::new("D:/my.replays")),
+            Path::new("D:/my.replays")
+        );
+        assert_eq!(
+            watch_root(Path::new("D:/replays/15..0")),
+            Path::new("D:/replays/15..0")
+        );
+    }
+
+    fn visible_roster() -> Roster {
+        Roster {
+            ids_by_name: HashMap::from([("seen".to_string(), 5)]),
+            accounts: HashMap::from([(
+                5,
+                AccountRecord {
+                    account_id: 5,
+                    hidden: false,
+                    created_at: None,
+                    pvp: Some(Totals {
+                        battles: 10,
+                        wins: 6,
+                        ..Totals::default()
+                    }),
+                    pvp_solo: None,
+                },
+            )]),
+            clans: HashMap::new(),
+        }
+    }
+
+    fn ship_state_of(stats: PlayerStats) -> Option<ShipStatsState> {
+        match stats {
+            PlayerStats::Loaded { ship_state, .. } => Some(ship_state),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn ship_stats_are_pending_until_they_are_fetched() {
+        let stats = visible_roster().stats_for(&vehicle("Seen", Relation::Ally, 1), None, None);
+        assert_eq!(ship_state_of(stats), Some(ShipStatsState::Pending));
+    }
+
+    #[test]
+    fn a_failed_ship_stats_request_is_unavailable_not_empty() {
+        let fetched = HashMap::new();
+        let stats =
+            visible_roster().stats_for(&vehicle("Seen", Relation::Ally, 1), Some(&fetched), None);
+        assert_eq!(ship_state_of(stats), Some(ShipStatsState::Unavailable));
+    }
+
+    #[test]
+    fn a_player_without_battles_in_the_ship_is_ready_with_no_ship_line() {
+        let other_ship = ShipRecord {
+            ship_id: 2,
+            pvp: Totals {
+                battles: 3,
+                ..Totals::default()
+            },
+            pvp_solo: None,
+        };
+        let fetched = HashMap::from([(5, vec![other_ship])]);
+        let stats =
+            visible_roster().stats_for(&vehicle("Seen", Relation::Ally, 1), Some(&fetched), None);
+        assert!(matches!(
+            stats,
+            PlayerStats::Loaded {
+                ship: None,
+                ship_state: ShipStatsState::Ready,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn saving_display_settings_keeps_the_battle() {
+        let current = Settings::default();
+        let display_only = Settings {
+            theme: crate::settings::Theme::Light,
+            always_on_top: true,
+            solo_stats: true,
+            region_override: Some(Region::Na),
+            ..Settings::default()
+        };
+        assert!(!needs_reattach(&current, &display_only));
+    }
+
+    #[test]
+    fn changing_the_game_folder_replays_folder_or_application_id_reattaches() {
+        let current = Settings::default();
+        let folder = Settings {
+            install_path: Some(PathBuf::from("D:/Games/World_of_Warships")),
+            ..Settings::default()
+        };
+        let replays = Settings {
+            replays_dir_override: Some(PathBuf::from("D:/replays")),
+            ..Settings::default()
+        };
+        let application_id = Settings {
+            application_id: Some("0123456789abcdef0123456789abcdef".into()),
+            ..Settings::default()
+        };
+        assert!(needs_reattach(&current, &folder));
+        assert!(needs_reattach(&current, &replays));
+        assert!(needs_reattach(&current, &application_id));
+    }
+
+    #[test]
+    fn expected_values_are_reused_for_a_day_and_retried_ten_minutes_after_a_failure() {
+        let start = Instant::now();
+        let loaded = ExpectedCache::Loaded {
+            values: ExpectedValues {
+                ships: HashMap::new(),
+            },
+            at: start,
+        };
+        let failed = ExpectedCache::Failed { at: start };
+        let hour = Duration::from_secs(60 * 60);
+
+        assert_eq!(
+            expected_plan(&ExpectedCache::Empty, start),
+            ExpectedPlan::Download
+        );
+        assert_eq!(expected_plan(&loaded, start + hour), ExpectedPlan::Reuse);
+        assert_eq!(
+            expected_plan(&loaded, start + 25 * hour),
+            ExpectedPlan::Download
+        );
+        assert_eq!(
+            expected_plan(&failed, start + Duration::from_secs(60)),
+            ExpectedPlan::SkipAfterFailure
+        );
+        assert_eq!(expected_plan(&failed, start + hour), ExpectedPlan::Download);
     }
 }

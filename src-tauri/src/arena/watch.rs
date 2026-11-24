@@ -21,6 +21,7 @@ use crate::model::ArenaInfo;
 const DEBOUNCE: Duration = Duration::from_millis(250);
 const RETRY_INTERVAL: Duration = Duration::from_millis(200);
 const READ_PATIENCE: Duration = Duration::from_secs(3);
+const STALE_ARENA_AGE: Duration = Duration::from_secs(60 * 60);
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,8 +100,21 @@ fn watch_failure(error: impl ToString) -> WatchError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Change {
     Written(PathBuf),
-    Removed,
+    Removed(PathBuf),
     NeedsRescan,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct Tracked {
+    fingerprint: Option<String>,
+    path: Option<PathBuf>,
+}
+
+fn concerns_tracked(tracked: &Tracked, change: &Change) -> bool {
+    match (change, tracked.path.as_ref()) {
+        (Change::Removed(removed), Some(active)) => removed == active,
+        _ => true,
+    }
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -148,7 +162,7 @@ fn is_arena_file(path: &Path) -> bool {
 fn change_for(kind: EventKind, path: &Path) -> Option<Change> {
     match kind {
         EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
-            Some(Change::Removed)
+            Some(Change::Removed(path.to_path_buf()))
         }
         EventKind::Create(_) | EventKind::Modify(_) => Some(Change::Written(path.to_path_buf())),
         EventKind::Access(_) | EventKind::Any | EventKind::Other => None,
@@ -161,7 +175,7 @@ fn changes_for(kind: EventKind, paths: &[PathBuf]) -> Vec<Change> {
             let renamed_away = paths
                 .first()
                 .filter(|from| is_arena_file(from))
-                .map(|_| Change::Removed);
+                .map(|from| Change::Removed(from.clone()));
             let renamed_into = paths
                 .get(1)
                 .filter(|to| is_arena_file(to))
@@ -266,8 +280,16 @@ fn existing_arena_file(replays_dir: &Path) -> Option<PathBuf> {
     top_level
         .into_iter()
         .chain(one_level_down)
-        .filter(|path| is_arena_file(path) && path.is_file())
+        .filter(|path| is_arena_file(path) && path.is_file() && is_recent(path))
         .max_by_key(|path| fs::metadata(path).and_then(|meta| meta.modified()).ok())
+}
+
+fn is_recent(path: &Path) -> bool {
+    fs::metadata(path)
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|modified| modified.elapsed().ok())
+        .is_none_or(|age| age < STALE_ARENA_AGE)
 }
 
 fn batch_changes(batch: DebounceEventResult) -> Vec<Change> {
@@ -299,28 +321,41 @@ impl<F: Fn(ArenaEvent)> Worker<F> {
             .chain(later)
             .take_while(|_| !self.is_stopping())
             .flatten()
-            .fold(None, |last_fingerprint, change| {
-                self.apply(last_fingerprint, change)
+            .fold(Tracked::default(), |tracked, change| {
+                self.apply(tracked, change)
             });
     }
 
-    fn apply(&self, last_fingerprint: Option<String>, change: Change) -> Option<String> {
-        let Some(observation) = self.observe(change).filter(|_| !self.is_stopping()) else {
-            return last_fingerprint;
+    fn apply(&self, tracked: Tracked, change: Change) -> Tracked {
+        if !concerns_tracked(&tracked, &change) {
+            return tracked;
+        }
+        let Some((observation, source)) = self.observe(change).filter(|_| !self.is_stopping())
+        else {
+            return tracked;
         };
-        let decision = decide(last_fingerprint.as_deref(), observation);
+        let decision = decide(tracked.fingerprint.as_deref(), observation);
         if let Some(event) = decision.emit {
             (self.on_event)(event);
         }
-        decision.last_fingerprint
+        let path = decision
+            .last_fingerprint
+            .as_ref()
+            .and(source.or(tracked.path));
+        Tracked {
+            fingerprint: decision.last_fingerprint,
+            path,
+        }
     }
 
-    fn observe(&self, change: Change) -> Option<Observation> {
+    fn observe(&self, change: Change) -> Option<(Observation, Option<PathBuf>)> {
         match change {
-            Change::Written(path) => self.read(&path),
-            Change::Removed => Some(Observation::Removed),
-            Change::NeedsRescan => existing_arena_file(&self.replays_dir)
-                .map_or(Some(Observation::Absent), |path| self.read(&path)),
+            Change::Written(path) => self.read(&path).map(|seen| (seen, Some(path))),
+            Change::Removed(_) => Some((Observation::Removed, None)),
+            Change::NeedsRescan => match existing_arena_file(&self.replays_dir) {
+                Some(path) => self.read(&path).map(|seen| (seen, Some(path))),
+                None => Some((Observation::Absent, None)),
+            },
         }
     }
 
@@ -397,7 +432,7 @@ mod tests {
         kinds.into_iter().for_each(|kind| {
             assert_eq!(
                 changes_for(kind, &[arena_path()]),
-                vec![Change::Removed],
+                vec![Change::Removed(arena_path())],
                 "{kind:?}"
             );
         });
@@ -437,7 +472,7 @@ mod tests {
         );
         assert_eq!(
             changes_for(both, &[arena_path(), other]),
-            vec![Change::Removed]
+            vec![Change::Removed(arena_path())]
         );
     }
 
@@ -465,7 +500,7 @@ mod tests {
             changes_in(&events),
             vec![
                 Change::Written(arena_path()),
-                Change::Removed,
+                Change::Removed(arena_path()),
                 Change::Written(arena_path()),
             ]
         );
@@ -640,5 +675,36 @@ mod tests {
             events.recv_timeout(PATIENCE),
             Ok(ArenaEvent::Started(fixture()))
         );
+    }
+
+    #[test]
+    fn only_the_active_arena_file_ending_counts() {
+        let active = Tracked {
+            fingerprint: Some(fixture().fingerprint()),
+            path: Some(arena_path()),
+        };
+        let leftover = replays().join("15.9.0.0").join(FILE_NAME);
+
+        assert!(concerns_tracked(&active, &Change::Removed(arena_path())));
+        assert!(!concerns_tracked(&active, &Change::Removed(leftover)));
+        assert!(concerns_tracked(
+            &Tracked::default(),
+            &Change::Removed(arena_path())
+        ));
+    }
+
+    #[test]
+    fn an_old_arena_file_left_by_a_crash_is_ignored_at_start_up() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let leftover = dir.path().join(FILE_NAME);
+        fs::write(&leftover, FIXTURE).expect("the fixture is written");
+        let two_hours_ago = std::time::SystemTime::now() - Duration::from_secs(2 * 60 * 60);
+        fs::File::options()
+            .write(true)
+            .open(&leftover)
+            .and_then(|file| file.set_modified(two_hours_ago))
+            .expect("the modified time is set");
+
+        assert_eq!(existing_arena_file(dir.path()), None);
     }
 }

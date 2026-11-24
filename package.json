@@ -1,7 +1,7 @@
 {
   "name": "crowsnest",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "A fast, private, local-first match monitor for World of Warships.",
   "license": "Apache-2.0",
   "type": "module",

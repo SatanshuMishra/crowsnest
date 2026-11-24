@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.0](https://github.com/SatanshuMishra/crowsnest/compare/v1.0.2...v1.1.0) (2026-11-24)
+
+
+### Features
+
+* **appearance:** add Muted, Vibrant and Colour-blind friendly tier palettes ([1d2566c](https://github.com/SatanshuMishra/crowsnest/commit/1d2566c3f2604e6f8f16c536a7216c5970069732))
+* **appearance:** show a What’s new card for each release, with an appearance walkthrough beside a live preview ([1f4c87b](https://github.com/SatanshuMishra/crowsnest/commit/1f4c87b80a6889a85d71f92dd24ee398b0035070))
+* **settings:** split Settings into sections with search and live appearance previews ([abcb847](https://github.com/SatanshuMishra/crowsnest/commit/abcb847ceca21e52a54f1f112b4cd5a80fd8a9a1))
+* **window:** add a title-bar pin for always on top and confirm refreshes with a toast ([d7c940f](https://github.com/SatanshuMishra/crowsnest/commit/d7c940fb4012d92c8fb2ef26fb5f20545a1af86d))
+
 ## [1.0.2](https://github.com/SatanshuMishra/crowsnest/compare/v1.0.1...v1.0.2) (2026-11-24)
 
 

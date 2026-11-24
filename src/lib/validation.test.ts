@@ -40,6 +40,7 @@ describe("validateApplicationId", () => {
 describe("describeVerifyFailure", () => {
   it.each([
     ["the Wargaming application ID was rejected", "rejected"],
+    ["Wargaming has blocked this application ID", "blocked"],
     ["Wargaming is rate limiting requests; try again shortly", "rateLimited"],
     ["could not reach Wargaming: operation timed out", "network"],
     ["unexpected response from Wargaming: missing data", "unexpected"],

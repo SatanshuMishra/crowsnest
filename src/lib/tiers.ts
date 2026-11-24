@@ -1,4 +1,4 @@
-import type { StatKind } from "./format";
+import { displayedValue, type StatKind } from "./format";
 import type { ExpectedStats, HighlightStat, StatLine } from "./types";
 
 export const TIERS = [
@@ -62,19 +62,19 @@ export function ratio(actual: number | null | undefined, expected: number | null
 }
 
 export function personalRatingTier(value: number | null | undefined): Tier | null {
-  return tierFor(value, PERSONAL_RATING_CUTOFFS);
+  return tierFor(displayedValue("personalRating", value), PERSONAL_RATING_CUTOFFS);
 }
 
 export function winRateTier(value: number | null | undefined): Tier | null {
-  return tierFor(value, WIN_RATE_CUTOFFS);
+  return tierFor(displayedValue("winRate", value), WIN_RATE_CUTOFFS);
 }
 
 export function damageTier(averageDamage: number | null | undefined, expected: ExpectedStats | null): Tier | null {
-  return tierFor(ratio(averageDamage, expected?.damage), RATIO_CUTOFFS);
+  return tierFor(ratio(displayedValue("damage", averageDamage), expected?.damage), RATIO_CUTOFFS);
 }
 
 export function fragsTier(averageFrags: number | null | undefined, expected: ExpectedStats | null): Tier | null {
-  return tierFor(ratio(averageFrags, expected?.frags), RATIO_CUTOFFS);
+  return tierFor(ratio(displayedValue("frags", averageFrags), expected?.frags), RATIO_CUTOFFS);
 }
 
 const TIERED_KINDS: ReadonlySet<StatKind> = new Set<StatKind>(["winRate", "personalRating", "damage", "frags"]);

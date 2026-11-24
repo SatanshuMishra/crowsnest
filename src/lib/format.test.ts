@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clientVersionLabel,
+  divisionLetter,
   MISSING,
   THIN_SPACE,
   formatDamage,
@@ -146,5 +147,11 @@ describe("clientVersionLabel", () => {
 
   it("leaves a dotted version as it is", () => {
     expect(clientVersionLabel(" 15.10.0.0.13533378 ")).toBe("15.10.0.0.13533378");
+  });
+});
+
+describe("divisionLetter", () => {
+  it("letters a team's divisions in order from A", () => {
+    expect([1, 2, 3, 6].map(divisionLetter)).toEqual(["A", "B", "C", "F"]);
   });
 });

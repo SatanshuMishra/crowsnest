@@ -1,6 +1,6 @@
 <script lang="ts">
   import StatCell from "./StatCell.svelte";
-  import { romanNumeral, shipClassBadge } from "../../lib/format";
+  import { divisionLetter, romanNumeral, shipClassBadge } from "../../lib/format";
   import { columnValue, playerLines, type ColumnGroups } from "../../lib/team";
   import { highlightTier, statTier, tierColor } from "../../lib/tiers";
   import type { Player, Settings } from "../../lib/types";
@@ -23,6 +23,7 @@
   const allColumns = $derived([...columns.ship, ...columns.account]);
   const suffix = $derived(settings.soloStats ? ", solo" : "");
   const isMe = $derived(player.relation === "me");
+  const division = $derived(player.division === null ? null : divisionLetter(player.division));
   const badge = $derived(player.ship ? shipClassBadge(player.ship.class) : null);
   const highlight = $derived(
     settings.highlight !== "none" && lines ? highlightTier(settings.highlightStat, lines, player.expected) : null,
@@ -60,6 +61,10 @@
         <span class="clan">[{player.clanTag}]</span>
       {/if}
       <span class="name">{player.name}</span>
+      {#if division}
+        <span class="division" title="Division {division}" aria-hidden="true">({division})</span>
+        <span class="visually-hidden">, division {division}</span>
+      {/if}
       {#if isMe}
         <span class="visually-hidden">(You)</span>
       {/if}
@@ -227,6 +232,10 @@
   .clan {
     color: var(--text-faint);
     font-size: var(--fs-xs);
+  }
+
+  .division {
+    color: var(--division);
   }
 
   .class-badge {

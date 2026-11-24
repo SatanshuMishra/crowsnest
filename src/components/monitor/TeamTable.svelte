@@ -15,7 +15,8 @@
   let { side, title, players, settings, onopen }: Props = $props();
   const id = $props.id();
 
-  const columns = $derived(statColumns(settings.density));
+  let tableWidth = $state(0);
+  const columns = $derived(statColumns(settings.density, tableWidth || Number.POSITIVE_INFINITY));
   const allColumns = $derived([...columns.ship, ...columns.account]);
   const suffix = $derived(settings.soloStats ? ", solo" : "");
 </script>
@@ -23,7 +24,7 @@
 <section class="team {side}" aria-labelledby="{id}-title">
   <TeamSummary {title} titleId="{id}-title" {players} {settings} />
   <p id="{id}-hint" class="visually-hidden">Press Enter to open this player's details.</p>
-  <div class="scroll">
+  <div class="scroll" bind:clientWidth={tableWidth}>
     <table>
       <caption class="visually-hidden">{title}</caption>
       <colgroup span="2"></colgroup>

@@ -184,3 +184,26 @@ describe("summarizeTeam", () => {
     expect(coverageLabel(summary)).toBe("0 of 1 with stats");
   });
 });
+
+describe("statColumns by table width", () => {
+  const kinds = (width: number) => statColumns("comfortable", width).ship.map((column) => column.kind);
+
+  it("shows every ship column in a wide table", () => {
+    expect(kinds(900)).toEqual(["battles", "winRate", "personalRating", "damage", "frags", "xp"]);
+  });
+
+  it("drops experience first as the table narrows", () => {
+    expect(kinds(780)).toEqual(["battles", "winRate", "personalRating", "damage", "frags"]);
+  });
+
+  it("drops frags too in a narrow table", () => {
+    expect(kinds(620)).toEqual(["battles", "winRate", "personalRating", "damage"]);
+  });
+
+  it("keeps the account columns at any width", () => {
+    expect(statColumns("comfortable", 400).account.map((column) => column.id)).toEqual([
+      "accountBattles",
+      "accountWinRate",
+    ]);
+  });
+});

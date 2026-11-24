@@ -59,14 +59,27 @@ const ACCOUNT_COLUMNS: readonly StatColumn[] = [
 ];
 
 const COMPACT_HIDDEN: ReadonlySet<StatKind> = new Set<StatKind>(["frags", "xp"]);
+const MEDIUM_HIDDEN: ReadonlySet<StatKind> = new Set<StatKind>(["xp"]);
+const NOTHING_HIDDEN: ReadonlySet<StatKind> = new Set<StatKind>();
+
+export const NARROW_TABLE_WIDTH = 720;
+export const MEDIUM_TABLE_WIDTH = 820;
+
+function hiddenKinds(density: Density, tableWidth: number): ReadonlySet<StatKind> {
+  if (density === "compact" || tableWidth < NARROW_TABLE_WIDTH) {
+    return COMPACT_HIDDEN;
+  }
+  return tableWidth < MEDIUM_TABLE_WIDTH ? MEDIUM_HIDDEN : NOTHING_HIDDEN;
+}
 
 export interface ColumnGroups {
   ship: StatColumn[];
   account: StatColumn[];
 }
 
-export function statColumns(density: Density): ColumnGroups {
-  const ship = density === "compact" ? SHIP_COLUMNS.filter((column) => !COMPACT_HIDDEN.has(column.kind)) : [...SHIP_COLUMNS];
+export function statColumns(density: Density, tableWidth = Number.POSITIVE_INFINITY): ColumnGroups {
+  const hidden = hiddenKinds(density, tableWidth);
+  const ship = SHIP_COLUMNS.filter((column) => !hidden.has(column.kind));
   return { ship, account: [...ACCOUNT_COLUMNS] };
 }
 

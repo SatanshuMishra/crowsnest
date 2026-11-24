@@ -2,7 +2,6 @@
   import PlayerDetail from "../components/monitor/PlayerDetail.svelte";
   import StatusView from "../components/monitor/StatusView.svelte";
   import TeamTable from "../components/monitor/TeamTable.svelte";
-  import TopBar from "../components/TopBar.svelte";
   import { app } from "../lib/state.svelte";
   import type { Player } from "../lib/types";
 
@@ -48,7 +47,6 @@
 
 {#if snapshot && settings}
   <div class="monitor">
-    <TopBar {snapshot} />
     <main class="content">
       <StatusView {snapshot} {settings} {battleShown} />
       {#if battle && battleShown}

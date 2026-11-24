@@ -28,6 +28,10 @@
   --radius-md: 6px;
   --radius-lg: 8px;
   --target-min: 28px;
+  --titlebar-height: calc(var(--target-min) + var(--space-5));
+  --window-control-width: 46px;
+  --window-close: #c42b1c;
+  --window-close-text: #ffffff;
   --measure: 36rem;
 
   --bg: #121212;

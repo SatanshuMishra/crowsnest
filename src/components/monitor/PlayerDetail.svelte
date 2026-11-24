@@ -269,11 +269,11 @@
 <style>
   .sheet {
     position: fixed;
-    inset: 0 0 0 auto;
+    inset: var(--titlebar-height) 0 0 auto;
     width: min(100vw, 26rem);
     max-width: 100vw;
-    height: 100%;
-    max-height: 100%;
+    height: calc(100% - var(--titlebar-height));
+    max-height: calc(100% - var(--titlebar-height));
     margin: 0;
     padding: 0;
     border: 0;

@@ -2,7 +2,7 @@
   import PlayerDetail from "../components/monitor/PlayerDetail.svelte";
   import StatusView from "../components/monitor/StatusView.svelte";
   import TeamTable from "../components/monitor/TeamTable.svelte";
-  import TopBar from "../components/monitor/TopBar.svelte";
+  import TopBar from "../components/TopBar.svelte";
   import { app } from "../lib/state.svelte";
   import type { Player } from "../lib/types";
 

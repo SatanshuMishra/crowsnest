@@ -1,11 +1,11 @@
 <script lang="ts">
-  import UpdateNotice from "../UpdateNotice.svelte";
-  import IconButton from "../ui/IconButton.svelte";
-  import { backend } from "../../lib/backend";
-  import { matchType, regionLabel, regionName } from "../../lib/format";
-  import { REFRESH_MIN_SPIN_MS, canRefresh, cooldownSeconds, refreshLabel } from "../../lib/refresh";
-  import { app } from "../../lib/state.svelte";
-  import type { Phase, Snapshot } from "../../lib/types";
+  import UpdateNotice from "./UpdateNotice.svelte";
+  import IconButton from "./ui/IconButton.svelte";
+  import { backend } from "../lib/backend";
+  import { matchType, regionLabel, regionName } from "../lib/format";
+  import { REFRESH_MIN_SPIN_MS, canRefresh, cooldownSeconds, refreshLabel } from "../lib/refresh";
+  import { app } from "../lib/state.svelte";
+  import type { Phase, Snapshot } from "../lib/types";
 
   interface Props {
     snapshot: Snapshot;

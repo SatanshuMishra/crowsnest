@@ -49,6 +49,10 @@ pub enum WgError {
     Api { code: u16, message: String },
     #[error("could not reach Wargaming: {0}")]
     Network(String),
+    #[error("could not reach Wargaming: {0}")]
+    Unavailable(String),
+    #[error("could not reach Wargaming: the request timed out")]
+    TimedOut,
     #[error("unexpected response from Wargaming: {0}")]
     Decode(String),
 }
@@ -149,7 +153,17 @@ impl WgClient {
         if self.application_id.trim().is_empty() {
             return Err(WgError::InvalidApplicationId);
         }
-        retry_once_when_transient(TRANSIENT_RETRY_DELAY, || self.attempt(request)).await
+        retry_while(
+            &[TRANSIENT_RETRY_DELAY],
+            worth_an_immediate_retry,
+            |error, _| {
+                log::debug!(
+                    "Wargaming request failed with a transient error ({error}); retrying once"
+                )
+            },
+            || self.attempt(request),
+        )
+        .await
     }
 
     async fn attempt(&self, request: &ApiRequest) -> Result<Payload, WgError> {
@@ -158,10 +172,7 @@ impl WgClient {
         let response = self.http.get(url).send().await.map_err(transport_failure)?;
         let status = response.status();
         if !status.is_success() {
-            return Err(WgError::Network(format!(
-                "Wargaming answered with HTTP status {}",
-                status.as_u16()
-            )));
+            return Err(status_failure(status.as_u16()));
         }
         let body = read_limited(response, MAX_RESPONSE_BYTES)
             .await
@@ -178,22 +189,32 @@ fn body_failure(error: BodyError) -> WgError {
 }
 
 fn transport_failure(error: reqwest::Error) -> WgError {
-    let description = if error.is_timeout() {
-        "the request timed out".to_owned()
+    if error.is_timeout() {
+        WgError::TimedOut
     } else if error.is_connect() {
-        "the connection could not be established".to_owned()
+        WgError::Unavailable("the connection could not be established".to_owned())
     } else {
-        error.without_url().to_string()
-    };
-    WgError::Network(description)
+        WgError::Network(error.without_url().to_string())
+    }
+}
+
+fn status_failure(status: u16) -> WgError {
+    let description = format!("Wargaming answered with HTTP status {status}");
+    if (500..600).contains(&status) {
+        WgError::Unavailable(description)
+    } else {
+        WgError::Network(description)
+    }
 }
 
 const SOURCE_NOT_AVAILABLE: u16 = 504;
 
-fn is_transient(error: &WgError) -> bool {
+pub fn is_transient(error: &WgError) -> bool {
     matches!(
         error,
         WgError::RateLimited
+            | WgError::Unavailable(_)
+            | WgError::TimedOut
             | WgError::Api {
                 code: SOURCE_NOT_AVAILABLE,
                 ..
@@ -201,19 +222,30 @@ fn is_transient(error: &WgError) -> bool {
     )
 }
 
-async fn retry_once_when_transient<T, F, Fut>(delay: Duration, attempt: F) -> Result<T, WgError>
+fn worth_an_immediate_retry(error: &WgError) -> bool {
+    is_transient(error) && *error != WgError::TimedOut
+}
+
+pub async fn retry_while<T, F, Fut>(
+    delays: &[Duration],
+    retryable: fn(&WgError) -> bool,
+    on_retry: impl Fn(&WgError, Duration),
+    attempt: F,
+) -> Result<T, WgError>
 where
     F: Fn() -> Fut,
     Fut: Future<Output = Result<T, WgError>>,
 {
-    match attempt().await {
-        Err(error) if is_transient(&error) => {
-            log::debug!("Wargaming request failed with a transient error ({error}); retrying once");
-            tokio::time::sleep(delay).await;
-            attempt().await
+    let mut outcome = attempt().await;
+    for &delay in delays {
+        match &outcome {
+            Err(error) if retryable(error) => on_retry(error, delay),
+            _ => break,
         }
-        outcome => outcome,
+        tokio::time::sleep(delay).await;
+        outcome = attempt().await;
     }
+    outcome
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -686,7 +718,7 @@ fn sorted_by_id(ships: impl Iterator<Item = Ship>) -> Vec<Ship> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
 
     use super::*;
 
@@ -1079,7 +1111,7 @@ mod tests {
         let delay = Duration::from_millis(20);
         let attempts = Cell::new(0);
         let started = Instant::now();
-        let outcome = retry_once_when_transient(delay, || {
+        let outcome = retry_once(delay, || {
             attempts.set(attempts.get() + 1);
             let attempt = attempts.get();
             async move {
@@ -1099,12 +1131,11 @@ mod tests {
     #[tokio::test]
     async fn persistent_rate_limit_surfaces_after_one_retry() {
         let attempts = Cell::new(0);
-        let outcome: Result<(), WgError> =
-            retry_once_when_transient(Duration::from_millis(1), || {
-                attempts.set(attempts.get() + 1);
-                async { Err(WgError::RateLimited) }
-            })
-            .await;
+        let outcome: Result<(), WgError> = retry_once(Duration::from_millis(1), || {
+            attempts.set(attempts.get() + 1);
+            async { Err(WgError::RateLimited) }
+        })
+        .await;
         assert_eq!(outcome, Err(WgError::RateLimited));
         assert_eq!(attempts.get(), 2);
     }
@@ -1112,14 +1143,79 @@ mod tests {
     #[tokio::test]
     async fn other_failures_are_not_retried() {
         let attempts = Cell::new(0);
-        let outcome: Result<(), WgError> =
-            retry_once_when_transient(Duration::from_millis(1), || {
-                attempts.set(attempts.get() + 1);
-                async { Err(WgError::Network("offline".to_owned())) }
-            })
-            .await;
+        let outcome: Result<(), WgError> = retry_once(Duration::from_millis(1), || {
+            attempts.set(attempts.get() + 1);
+            async { Err(WgError::Network("offline".to_owned())) }
+        })
+        .await;
         assert_eq!(outcome, Err(WgError::Network("offline".to_owned())));
         assert_eq!(attempts.get(), 1);
+    }
+
+    async fn retry_once<T, F, Fut>(delay: Duration, attempt: F) -> Result<T, WgError>
+    where
+        F: Fn() -> Fut,
+        Fut: Future<Output = Result<T, WgError>>,
+    {
+        retry_while(&[delay], worth_an_immediate_retry, |_, _| {}, attempt).await
+    }
+
+    #[tokio::test]
+    async fn a_timed_out_request_is_not_retried_at_once() {
+        let attempts = Cell::new(0);
+        let outcome: Result<(), WgError> = retry_once(Duration::from_millis(1), || {
+            attempts.set(attempts.get() + 1);
+            async { Err(WgError::TimedOut) }
+        })
+        .await;
+        assert_eq!(outcome, Err(WgError::TimedOut));
+        assert_eq!(attempts.get(), 1);
+    }
+
+    #[tokio::test]
+    async fn each_delay_buys_one_more_attempt_and_is_reported() {
+        let attempts = Cell::new(0);
+        let reported = RefCell::new(Vec::new());
+        let delays = [Duration::from_millis(1), Duration::from_millis(2)];
+        let outcome: Result<(), WgError> = retry_while(
+            &delays,
+            is_transient,
+            |error, delay| reported.borrow_mut().push((error.clone(), delay)),
+            || {
+                attempts.set(attempts.get() + 1);
+                async { Err(WgError::TimedOut) }
+            },
+        )
+        .await;
+        assert_eq!(outcome, Err(WgError::TimedOut));
+        assert_eq!(attempts.get(), 3);
+        assert_eq!(
+            reported.into_inner(),
+            vec![
+                (WgError::TimedOut, delays[0]),
+                (WgError::TimedOut, delays[1])
+            ]
+        );
+    }
+
+    #[test]
+    fn server_errors_are_transient_and_client_errors_are_not() {
+        assert_eq!(
+            status_failure(503),
+            WgError::Unavailable("Wargaming answered with HTTP status 503".to_owned())
+        );
+        assert!(is_transient(&status_failure(502)));
+        assert!(!is_transient(&status_failure(404)));
+        assert!(!is_transient(&WgError::InvalidApplicationId));
+        assert!(!is_transient(&WgError::Decode("missing data".to_owned())));
+    }
+
+    #[test]
+    fn a_timeout_still_reads_as_a_network_failure() {
+        assert_eq!(
+            WgError::TimedOut.to_string(),
+            "could not reach Wargaming: the request timed out"
+        );
     }
 
     fn schedule(log: StartLog, arrival: Instant, count: usize) -> Vec<Instant> {
@@ -1244,7 +1340,7 @@ mod tests {
     #[tokio::test]
     async fn source_not_available_is_retried_once() {
         let attempts = Cell::new(0);
-        let outcome = retry_once_when_transient(Duration::from_millis(1), || {
+        let outcome = retry_once(Duration::from_millis(1), || {
             attempts.set(attempts.get() + 1);
             let attempt = attempts.get();
             async move {

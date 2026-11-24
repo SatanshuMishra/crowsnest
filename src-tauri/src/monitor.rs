@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -19,10 +19,11 @@ use crate::rating::expected::ExpectedValues;
 use crate::rating::pr;
 use crate::settings::Settings;
 use crate::wg::catalog::ShipCatalog;
-use crate::wg::client::{AccountRecord, ShipRecord, WgClient, WgError};
+use crate::wg::client::{AccountRecord, ShipRecord, WgClient, WgError, is_transient, retry_while};
 
 pub const SNAPSHOT_EVENT: &str = "snapshot";
 const SHIP_STATS_CONCURRENCY: usize = 4;
+const ROSTER_RETRY_DELAYS: [Duration; 2] = [Duration::from_secs(2), Duration::from_secs(5)];
 const EXPECTED_VALUES_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 const EXPECTED_VALUES_RETRY_AFTER: Duration = Duration::from_secs(10 * 60);
 const SUPERVISE_INTERVAL: Duration = Duration::from_secs(5);
@@ -329,14 +330,21 @@ impl Monitor {
             },
         );
         let live = self.0.battle_live.load(Ordering::SeqCst);
+        let reveal = reveal_for(self.snapshot().battle.as_ref(), &placeholder.id);
         self.update(|snapshot| Snapshot {
-            phase: if live { Phase::Loading } else { snapshot.phase },
+            phase: match (reveal, live) {
+                (Reveal::WhenComplete, _) | (Reveal::AsTheyArrive, true) => Phase::Loading,
+                (Reveal::AsTheyArrive, false) => snapshot.phase,
+            },
             connected: snapshot.connected,
             install: snapshot.install.map(|install| GameInstall {
                 region: install_region.or(install.region),
                 ..install
             }),
-            battle: Some(keep_divisions(snapshot.battle.as_ref(), placeholder)),
+            battle: match reveal {
+                Reveal::AsTheyArrive => Some(keep_divisions(snapshot.battle.as_ref(), placeholder)),
+                Reveal::WhenComplete => snapshot.battle,
+            },
             notice: region_notice.clone(),
         });
 
@@ -361,7 +369,14 @@ impl Monitor {
         let monitor = self.clone();
         let task = tauri::async_runtime::spawn(async move {
             monitor
-                .load_battle(generation, client, arena, region_notice, own_application_id)
+                .load_battle(
+                    generation,
+                    client,
+                    arena,
+                    region_notice,
+                    own_application_id,
+                    reveal,
+                )
                 .await;
         });
         *lock(&self.0.load_task) = Some(task);
@@ -445,7 +460,9 @@ impl Monitor {
         arena: ArenaInfo,
         region_notice: Option<Notice>,
         own_application_id: bool,
+        reveal: Reveal,
     ) {
+        let started = Instant::now();
         let region = client.region();
         let ship_ids: Vec<u64> = arena
             .vehicles
@@ -458,9 +475,51 @@ impl Monitor {
             return;
         }
 
-        let roster = match fetch_roster(&client, &arena).await {
+        let battle_with =
+            |roster: &Roster, ships: &ShipResults, expected: Option<&ExpectedValues>| {
+                with_clans(
+                    assemble_battle(&arena, Some(region), &catalog, expected, |vehicle| {
+                        roster.stats_for(vehicle, ships, expected)
+                    }),
+                    roster,
+                )
+            };
+        let show = |battle: Battle| {
+            self.update_current(generation, |snapshot| Snapshot {
+                battle: Some(keep_divisions(snapshot.battle.as_ref(), battle)),
+                ..snapshot
+            });
+        };
+
+        let roster_then_accounts = async {
+            let roster = self
+                .fetch_roster_patiently(generation, &client, &arena)
+                .await;
+            if let Ok(roster) = &roster {
+                let accounts_only = (reveal == Reveal::AsTheyArrive)
+                    .then(|| battle_with(roster, &ShipResults::default(), None));
+                self.update_current(generation, |snapshot| Snapshot {
+                    battle: accounts_only
+                        .map(|battle| keep_divisions(snapshot.battle.as_ref(), battle))
+                        .or(snapshot.battle),
+                    notice: region_notice.clone(),
+                    ..snapshot
+                });
+            }
+            roster
+        };
+        let (roster, (expected, expected_notice)) =
+            futures::join!(roster_then_accounts, self.expected_values());
+        if !self.is_current(generation) {
+            return;
+        }
+        let roster = match roster {
             Ok(roster) => roster,
             Err(error) => {
+                log::warn!(
+                    "could not load the roster after {:.1} s: {error}",
+                    started.elapsed().as_secs_f64()
+                );
                 let reason = error.to_string();
                 let failed = assemble_battle(&arena, Some(region), &catalog, None, |vehicle| {
                     if vehicle.is_bot() {
@@ -471,58 +530,68 @@ impl Monitor {
                         }
                     }
                 });
+                let message = roster_failure_message(&error, own_application_id);
                 let phase = self.settled_phase();
                 self.update_current(generation, |snapshot| Snapshot {
                     phase,
-                    battle: Some(keep_divisions(snapshot.battle.as_ref(), failed)),
-                    notice: Some(notice(
-                        NoticeLevel::Error,
-                        roster_failure_message(&error, own_application_id),
-                    )),
+                    battle: shown_after_failure(reveal, snapshot.battle, failed),
+                    notice: Some(roster_failure_notice(reveal, &message)),
                     ..snapshot
                 });
                 return;
             }
         };
 
-        let early = with_clans(
-            assemble_battle(&arena, Some(region), &catalog, None, |vehicle| {
-                roster.stats_for(vehicle, None, None)
-            }),
-            &roster,
-        );
-        self.update_current(generation, |snapshot| Snapshot {
-            battle: Some(keep_divisions(snapshot.battle.as_ref(), early)),
-            ..snapshot
-        });
-
-        let ((expected, expected_notice), ship_records) =
-            futures::join!(self.expected_values(), fetch_ship_records(&client, &roster));
+        let ships = fetch_ship_records(&client, &roster, |partial| {
+            if reveal == Reveal::AsTheyArrive {
+                show(battle_with(&roster, partial, expected.as_ref()));
+            }
+        })
+        .await;
         if !self.is_current(generation) {
             return;
         }
-        let ship_notice = ship_stats_notice(&roster, &ship_records);
-
-        let complete = with_clans(
-            assemble_battle(
-                &arena,
-                Some(region),
-                &catalog,
-                expected.as_ref(),
-                |vehicle| roster.stats_for(vehicle, Some(&ship_records), expected.as_ref()),
-            ),
-            &roster,
+        log::info!(
+            "loaded statistics for {} players in {:.1} s; ship statistics failed for {}",
+            ship_ids.len(),
+            started.elapsed().as_secs_f64(),
+            ships.failed.len()
         );
+
+        let complete = battle_with(&roster, &ships, expected.as_ref());
         let phase = self.settled_phase();
         self.update_current(generation, |snapshot| Snapshot {
             phase,
             battle: Some(keep_divisions(snapshot.battle.as_ref(), complete)),
             notice: region_notice
-                .clone()
-                .or(ship_notice.clone())
-                .or(expected_notice.clone()),
+                .or(ship_stats_notice(&ships))
+                .or(expected_notice),
             ..snapshot
         });
+    }
+
+    async fn fetch_roster_patiently(
+        &self,
+        generation: u64,
+        client: &WgClient,
+        arena: &ArenaInfo,
+    ) -> Result<Roster, WgError> {
+        retry_while(
+            &ROSTER_RETRY_DELAYS,
+            is_transient,
+            |error, delay| {
+                log::warn!(
+                    "could not load the roster ({error}); trying again in {} s",
+                    delay.as_secs()
+                );
+                self.update_current(generation, |snapshot| Snapshot {
+                    notice: Some(notice(NoticeLevel::Info, ROSTER_RETRYING.to_owned())),
+                    ..snapshot
+                });
+            },
+            || fetch_roster(client, arena),
+        )
+        .await
     }
 
     async fn ships(&self, client: &WgClient, game_version: &str, required: &[u64]) -> ShipCatalog {
@@ -615,8 +684,64 @@ fn roster_failure_message(error: &WgError, own_application_id: bool) -> String {
     }
 }
 
+const ROSTER_RETRYING: &str = "Wargaming is having trouble answering. Trying again.";
+const FROM_BEFORE_THE_REFRESH: &str = "The statistics shown are from before the refresh.";
+
+fn roster_failure_notice(reveal: Reveal, message: &str) -> Notice {
+    let message = match reveal {
+        Reveal::AsTheyArrive => message.to_owned(),
+        Reveal::WhenComplete => format!("{} {FROM_BEFORE_THE_REFRESH}", as_sentence(message)),
+    };
+    notice(NoticeLevel::Error, message)
+}
+
+fn as_sentence(message: &str) -> String {
+    let capitalized: String = message
+        .chars()
+        .take(1)
+        .flat_map(char::to_uppercase)
+        .chain(message.chars().skip(1))
+        .collect();
+    if capitalized.ends_with('.') {
+        capitalized
+    } else {
+        format!("{capitalized}.")
+    }
+}
+
 fn notice(level: NoticeLevel, message: String) -> Notice {
     Notice { level, message }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reveal {
+    AsTheyArrive,
+    WhenComplete,
+}
+
+fn reveal_for(previous: Option<&Battle>, next_id: &str) -> Reveal {
+    let shows_loaded_stats = previous
+        .filter(|battle| battle.id == next_id)
+        .is_some_and(|battle| {
+            battle
+                .allies
+                .players
+                .iter()
+                .chain(&battle.enemies.players)
+                .any(|player| matches!(player.stats, PlayerStats::Loaded { .. }))
+        });
+    if shows_loaded_stats {
+        Reveal::WhenComplete
+    } else {
+        Reveal::AsTheyArrive
+    }
+}
+
+fn shown_after_failure(reveal: Reveal, previous: Option<Battle>, failed: Battle) -> Option<Battle> {
+    match reveal {
+        Reveal::AsTheyArrive => Some(keep_divisions(previous.as_ref(), failed)),
+        Reveal::WhenComplete => previous,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -682,7 +807,7 @@ impl Roster {
     fn stats_for(
         &self,
         vehicle: &ArenaVehicle,
-        ships: Option<&HashMap<u64, Vec<ShipRecord>>>,
+        ships: &ShipResults,
         expected: Option<&ExpectedValues>,
     ) -> PlayerStats {
         if vehicle.is_bot() {
@@ -696,12 +821,8 @@ impl Roster {
                 account_id: account.account_id,
             };
         };
-        let records = ships.and_then(|ships| ships.get(&account.account_id));
-        let ship_state = match (ships, records) {
-            (None, _) => ShipStatsState::Pending,
-            (Some(_), Some(_)) => ShipStatsState::Ready,
-            (Some(_), None) => ShipStatsState::Unavailable,
-        };
+        let records = ships.records.get(&account.account_id);
+        let ship_state = ships.state_of(account.account_id);
         let rating_over = |pick: fn(&ShipRecord) -> Option<Totals>| {
             expected.zip(records).and_then(|(expected, records)| {
                 let per_ship: Vec<(u64, Totals)> = records
@@ -772,7 +893,46 @@ async fn fetch_roster(client: &WgClient, arena: &ArenaInfo) -> Result<Roster, Wg
     })
 }
 
-async fn fetch_ship_records(client: &WgClient, roster: &Roster) -> HashMap<u64, Vec<ShipRecord>> {
+#[derive(Default)]
+struct ShipResults {
+    records: HashMap<u64, Vec<ShipRecord>>,
+    failed: HashSet<u64>,
+}
+
+impl ShipResults {
+    fn with(self, account_id: u64, outcome: Result<Vec<ShipRecord>, WgError>) -> ShipResults {
+        match outcome {
+            Ok(records) => ShipResults {
+                records: self
+                    .records
+                    .into_iter()
+                    .chain([(account_id, records)])
+                    .collect(),
+                ..self
+            },
+            Err(_) => ShipResults {
+                failed: self.failed.into_iter().chain([account_id]).collect(),
+                ..self
+            },
+        }
+    }
+
+    fn state_of(&self, account_id: u64) -> ShipStatsState {
+        if self.records.contains_key(&account_id) {
+            ShipStatsState::Ready
+        } else if self.failed.contains(&account_id) {
+            ShipStatsState::Unavailable
+        } else {
+            ShipStatsState::Pending
+        }
+    }
+}
+
+async fn fetch_ship_records(
+    client: &WgClient,
+    roster: &Roster,
+    on_progress: impl Fn(&ShipResults),
+) -> ShipResults {
     let visible: Vec<u64> = roster
         .accounts
         .values()
@@ -782,26 +942,19 @@ async fn fetch_ship_records(client: &WgClient, roster: &Roster) -> HashMap<u64, 
     stream::iter(visible)
         .map(|account_id| async move { (account_id, client.ship_stats(account_id).await) })
         .buffer_unordered(SHIP_STATS_CONCURRENCY)
-        .filter_map(|(account_id, result)| async move {
-            match result {
-                Ok(records) => Some((account_id, records)),
-                Err(error) => {
-                    log::warn!("ship stats unavailable for one player: {error}");
-                    None
-                }
+        .fold(ShipResults::default(), |results, (account_id, outcome)| {
+            if let Err(error) = &outcome {
+                log::warn!("ship stats unavailable for one player: {error}");
             }
+            let next = results.with(account_id, outcome);
+            on_progress(&next);
+            std::future::ready(next)
         })
-        .collect()
         .await
 }
 
-fn ship_stats_notice(roster: &Roster, fetched: &HashMap<u64, Vec<ShipRecord>>) -> Option<Notice> {
-    let missing = roster
-        .accounts
-        .values()
-        .filter(|account| !account.hidden && account.pvp.is_some())
-        .filter(|account| !fetched.contains_key(&account.account_id))
-        .count();
+fn ship_stats_notice(ships: &ShipResults) -> Option<Notice> {
+    let missing = ships.failed.len();
     let players = if missing == 1 { "player" } else { "players" };
     (missing > 0).then(|| {
         notice(
@@ -972,7 +1125,7 @@ mod tests {
 
     #[test]
     fn other_roster_failures_keep_their_own_message() {
-        let error = WgError::Network("the request timed out".into());
+        let error = WgError::TimedOut;
         assert_eq!(roster_failure_message(&error, false), error.to_string());
     }
 
@@ -1095,13 +1248,21 @@ mod tests {
             )]),
             clans: HashMap::new(),
         };
-        let stats = roster.stats_for(&vehicle("Shy", Relation::Enemy, 1), None, None);
+        let stats = roster.stats_for(
+            &vehicle("Shy", Relation::Enemy, 1),
+            &ShipResults::default(),
+            None,
+        );
         assert_eq!(stats, PlayerStats::Hidden { account_id: 7 });
     }
 
     #[test]
     fn a_name_wargaming_does_not_know_is_reported_as_not_found() {
-        let stats = empty_roster().stats_for(&vehicle("Ghost", Relation::Ally, 1), None, None);
+        let stats = empty_roster().stats_for(
+            &vehicle("Ghost", Relation::Ally, 1),
+            &ShipResults::default(),
+            None,
+        );
         assert_eq!(stats, PlayerStats::NotFound);
     }
 
@@ -1113,7 +1274,10 @@ mod tests {
             relation: Relation::Enemy,
             ship_id: 1,
         };
-        assert_eq!(empty_roster().stats_for(&bot, None, None), PlayerStats::Bot);
+        assert_eq!(
+            empty_roster().stats_for(&bot, &ShipResults::default(), None),
+            PlayerStats::Bot
+        );
     }
 
     #[test]
@@ -1181,15 +1345,18 @@ mod tests {
 
     #[test]
     fn ship_stats_are_pending_until_they_are_fetched() {
-        let stats = visible_roster().stats_for(&vehicle("Seen", Relation::Ally, 1), None, None);
+        let stats = visible_roster().stats_for(
+            &vehicle("Seen", Relation::Ally, 1),
+            &ShipResults::default(),
+            None,
+        );
         assert_eq!(ship_state_of(stats), Some(ShipStatsState::Pending));
     }
 
     #[test]
     fn a_failed_ship_stats_request_is_unavailable_not_empty() {
-        let fetched = HashMap::new();
-        let stats =
-            visible_roster().stats_for(&vehicle("Seen", Relation::Ally, 1), Some(&fetched), None);
+        let fetched = ShipResults::default().with(5, Err(WgError::TimedOut));
+        let stats = visible_roster().stats_for(&vehicle("Seen", Relation::Ally, 1), &fetched, None);
         assert_eq!(ship_state_of(stats), Some(ShipStatsState::Unavailable));
     }
 
@@ -1205,9 +1372,8 @@ mod tests {
             pvp_div2: None,
             pvp_div3: None,
         };
-        let fetched = HashMap::from([(5, vec![other_ship])]);
-        let stats =
-            visible_roster().stats_for(&vehicle("Seen", Relation::Ally, 1), Some(&fetched), None);
+        let fetched = ShipResults::default().with(5, Ok(vec![other_ship]));
+        let stats = visible_roster().stats_for(&vehicle("Seen", Relation::Ally, 1), &fetched, None);
         assert!(matches!(
             stats,
             PlayerStats::Loaded {
@@ -1248,8 +1414,8 @@ mod tests {
                 ..Totals::default()
             }),
         };
-        let fetched = HashMap::from([(5, vec![in_battle])]);
-        let stats = roster.stats_for(&vehicle("Seen", Relation::Ally, 1), Some(&fetched), None);
+        let fetched = ShipResults::default().with(5, Ok(vec![in_battle]));
+        let stats = roster.stats_for(&vehicle("Seen", Relation::Ally, 1), &fetched, None);
         let PlayerStats::Loaded {
             overall_div2,
             overall_div3,
@@ -1274,6 +1440,104 @@ mod tests {
             .chain(&battle.enemies.players)
             .map(|player| (player.name.clone(), player.division))
             .collect()
+    }
+
+    fn loaded_battle(arena: &ArenaInfo) -> Battle {
+        assemble_battle(arena, None, &ShipCatalog::default(), None, |vehicle| {
+            visible_roster().stats_for(vehicle, &ShipResults::default(), None)
+        })
+    }
+
+    fn failed_battle(arena: &ArenaInfo) -> Battle {
+        assemble_battle(arena, None, &ShipCatalog::default(), None, |_| {
+            PlayerStats::Failed {
+                reason: "offline".into(),
+            }
+        })
+    }
+
+    #[test]
+    fn refreshing_a_battle_that_shows_stats_waits_for_the_complete_table() {
+        let shown = loaded_battle(&arena(vec![vehicle("Seen", Relation::Ally, 1)]));
+        assert_eq!(reveal_for(Some(&shown), &shown.id), Reveal::WhenComplete);
+    }
+
+    #[test]
+    fn a_new_battle_or_one_without_stats_fills_in_as_stats_arrive() {
+        let first = arena(vec![vehicle("Seen", Relation::Ally, 1)]);
+        let next = ArenaInfo {
+            started_at: "2026-11-23T19:30:00".into(),
+            ..first.clone()
+        };
+        let loaded = loaded_battle(&first);
+        let failed = failed_battle(&first);
+        assert_eq!(reveal_for(None, &loaded.id), Reveal::AsTheyArrive);
+        assert_eq!(
+            reveal_for(Some(&loaded), &next.fingerprint()),
+            Reveal::AsTheyArrive
+        );
+        assert_eq!(reveal_for(Some(&failed), &failed.id), Reveal::AsTheyArrive);
+    }
+
+    #[test]
+    fn a_failed_refresh_keeps_the_statistics_already_shown() {
+        let battle_arena = arena(vec![vehicle("Seen", Relation::Ally, 1)]);
+        let shown = loaded_battle(&battle_arena);
+        let failed = failed_battle(&battle_arena);
+        assert_eq!(
+            shown_after_failure(Reveal::WhenComplete, Some(shown.clone()), failed.clone()),
+            Some(shown)
+        );
+        assert_eq!(
+            shown_after_failure(Reveal::AsTheyArrive, None, failed.clone()),
+            Some(failed)
+        );
+    }
+
+    #[test]
+    fn a_failed_refresh_says_the_statistics_are_from_before_it() {
+        let timed_out = WgError::TimedOut.to_string();
+        assert_eq!(
+            roster_failure_notice(Reveal::WhenComplete, &timed_out).message,
+            "Could not reach Wargaming: the request timed out. The statistics shown are from before the refresh."
+        );
+        assert_eq!(
+            roster_failure_notice(Reveal::WhenComplete, OWN_ID_BLOCKED).message,
+            format!("{OWN_ID_BLOCKED} {FROM_BEFORE_THE_REFRESH}")
+        );
+        assert_eq!(
+            roster_failure_notice(Reveal::AsTheyArrive, &timed_out).message,
+            timed_out
+        );
+    }
+
+    #[test]
+    fn a_player_stays_pending_while_other_players_ship_stats_arrive() {
+        let others_done = ShipResults::default()
+            .with(6, Ok(Vec::new()))
+            .with(7, Err(WgError::TimedOut));
+        let stats =
+            visible_roster().stats_for(&vehicle("Seen", Relation::Ally, 1), &others_done, None);
+        assert_eq!(ship_state_of(stats), Some(ShipStatsState::Pending));
+    }
+
+    #[test]
+    fn the_notice_counts_the_players_whose_ship_stats_failed() {
+        let results = ShipResults::default()
+            .with(5, Err(WgError::TimedOut))
+            .with(6, Err(WgError::RateLimited))
+            .with(7, Ok(Vec::new()));
+        assert_eq!(
+            ship_stats_notice(&results).map(|notice| notice.message),
+            Some(
+                "Wargaming did not return ship statistics for 2 players. Press Refresh to try again."
+                    .to_owned()
+            )
+        );
+        assert_eq!(
+            ship_stats_notice(&ShipResults::default().with(7, Ok(Vec::new()))),
+            None
+        );
     }
 
     fn pending_battle(arena: &ArenaInfo) -> Battle {

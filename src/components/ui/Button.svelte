@@ -4,7 +4,7 @@
 
   interface Props extends HTMLButtonAttributes {
     variant?: "primary" | "secondary" | "ghost" | "danger";
-    size?: "sm" | "md";
+    size?: "sm" | "md" | "lg";
     busy?: boolean;
     element?: HTMLButtonElement;
     children: Snippet;
@@ -61,6 +61,12 @@
 
   .button.md {
     min-height: 32px;
+  }
+
+  .button.lg {
+    min-height: 36px;
+    padding: 0 var(--space-5);
+    border-radius: var(--radius-lg);
   }
 
   .button.sm {

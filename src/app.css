@@ -20,7 +20,7 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
-  --radius-xl: 10px;
+  --radius-xl: 16px;
   --target-min: 28px;
   --titlebar-height: calc(var(--target-min) + var(--space-5));
   --window-control-width: 46px;
@@ -29,13 +29,11 @@
   --measure: 36rem;
   --nav-width: 15rem;
   --settings-width: 80rem;
-  --sheet-width: 28rem;
-  --sheet-mark: 4rem;
-  --sheet-action-height: 2.5rem;
   --popover-width: 36.25rem;
-  --dialog-width: 60rem;
-  --dialog-height: 37.5rem;
-  --dialog-options-width: 22.5rem;
+  --onboarding-width: 46rem;
+  --onboarding-height: 40rem;
+  --onboarding-hero: clamp(8.5rem, 30vh, 13.5rem);
+  --onboarding-tile: 4.5rem;
   --toast-width: 23.75rem;
   --toast-life: 6s;
 
@@ -88,6 +86,11 @@
   --highlight-fill-alpha: 10%;
   --shadow-pop: 0 16px 40px rgb(0 0 0 / 50%);
   --scrim: rgb(0 0 0 / 60%);
+  --wash-teal: #3fb8b5;
+  --wash-violet: #8f74e8;
+  --wash-amber: #d9a441;
+  --wash-green: #5dbb7c;
+  --wash-strength: 24%;
 }
 
 [data-theme="light"] {
@@ -130,6 +133,11 @@
   --highlight-fill-alpha: 9%;
   --shadow-pop: 0 16px 40px rgb(0 0 0 / 14%);
   --scrim: rgb(0 0 0 / 32%);
+  --wash-teal: #2aa8a4;
+  --wash-violet: #8466ea;
+  --wash-amber: #e0a43a;
+  --wash-green: #45ad69;
+  --wash-strength: 18%;
 }
 
 [data-theme="dark"][data-palette="vibrant"] {
@@ -196,6 +204,7 @@
   --fs-md: calc(0.875rem * var(--text-scale));
   --fs-lg: calc(1rem * var(--text-scale));
   --fs-xl: calc(1.375rem * var(--text-scale));
+  --fs-2xl: calc(1.75rem * var(--text-scale));
   --row-height: max(28px, calc(2.25rem * var(--text-scale)));
 }
 

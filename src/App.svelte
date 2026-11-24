@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import AppearanceSetup from "./components/AppearanceSetup.svelte";
+  import { onMount, untrack } from "svelte";
+  import Onboarding from "./components/Onboarding.svelte";
   import Toast from "./components/Toast.svelte";
   import TopBar, { type Screen } from "./components/TopBar.svelte";
-  import WhatsNew from "./components/WhatsNew.svelte";
   import {
     INTRO_VERSION,
     introAudience,
@@ -14,6 +13,7 @@
   } from "./lib/intro";
   import { app } from "./lib/state.svelte";
   import { toasts } from "./lib/toast.svelte";
+  import type { Settings as SettingsValues } from "./lib/types";
   import Monitor from "./views/Monitor.svelte";
   import Settings from "./views/Settings.svelte";
   import Setup from "./views/Setup.svelte";
@@ -22,6 +22,8 @@
   app.systemDark = darkQuery.matches;
   let startError = $state<string | null>(null);
   let introOffered = false;
+  let introBefore = $state.raw<SettingsValues | null>(null);
+  let onboardingClosing = $state(false);
 
   onMount(() => {
     const onSchemeChange = (event: MediaQueryListEvent) => {
@@ -69,29 +71,27 @@
       introOffered = true;
     } else if (introCanOpen(phase, screen === "monitor")) {
       introOffered = true;
+      untrack(() => (introBefore ??= $state.snapshot(settings)));
       app.setup = audience;
     }
   });
 
   $effect(() => {
-    if (introInterrupted(app.setup, app.snapshot?.phase)) {
+    if (!onboardingClosing && introInterrupted(app.setup, app.snapshot?.phase)) {
       app.setup = null;
       introOffered = false;
     }
   });
 
-  function closeWhatsNew(review: boolean) {
-    void app.update({ introSeen: INTRO_VERSION });
-    app.setup = review ? "tour" : null;
-  }
-
-  function closeSetup(outcome: SetupOutcome) {
+  function closeOnboarding(outcome: SetupOutcome) {
     const audience = app.setup;
     app.setup = null;
-    if (audience === null || audience === "updating") {
+    onboardingClosing = false;
+    if (audience === null) {
       return;
     }
     if (audience !== "tour") {
+      introBefore = null;
       void app.update({ introSeen: INTRO_VERSION });
     }
     const toast = setupToast(audience, outcome);
@@ -125,10 +125,14 @@
           {/if}
         </div>
       {/key}
-      {#if app.setup === "updating"}
-        <WhatsNew version={app.info?.version ?? null} onclose={closeWhatsNew} />
-      {:else if app.setup}
-        <AppearanceSetup audience={app.setup} settings={app.settings} onclose={closeSetup} />
+      {#if app.setup}
+        <Onboarding
+          audience={app.setup}
+          settings={app.settings}
+          before={app.setup === "tour" ? null : introBefore}
+          onclosing={() => (onboardingClosing = true)}
+          onclose={closeOnboarding}
+        />
       {/if}
     {/if}
   </div>

@@ -78,10 +78,16 @@
 <style>
   .field {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-5);
+    gap: var(--space-2) var(--space-5);
     min-height: 40px;
+  }
+
+  .text {
+    flex: 1 1 12rem;
+    min-width: 0;
   }
 
   .label {

@@ -20,12 +20,12 @@
   .swatch {
     display: grid;
     flex: none;
-    grid-template-columns: repeat(8, 9px);
-    gap: 2px;
+    grid-template-columns: repeat(8, var(--swatch-cell, 9px));
+    gap: var(--swatch-gap, 2px);
   }
 
   .swatch span {
-    height: 14px;
-    border-radius: 2px;
+    height: var(--swatch-height, 14px);
+    border-radius: var(--swatch-radius, 2px);
   }
 </style>

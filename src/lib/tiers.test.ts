@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { formatDamage, formatFrags, formatRating, formatWinRate } from "./format";
 import type { StatLine } from "./types";
 import {
   NO_TIER_NAME,
@@ -35,7 +36,7 @@ function line(change: Partial<StatLine>): StatLine {
 describe("personalRatingTier", () => {
   it.each([
     [0, "bad"],
-    [749.9, "bad"],
+    [749.4, "bad"],
     [750, "belowAverage"],
     [1099, "belowAverage"],
     [1100, "average"],
@@ -102,6 +103,61 @@ describe("ratio tiers", () => {
   it("has no tier without expected values", () => {
     expect(damageTier(50000, null)).toBeNull();
     expect(fragsTier(1, null)).toBeNull();
+  });
+});
+
+describe("tiers of rounded values", () => {
+  const ratioExpected = { damage: 1000, frags: 1, winRate: 50 };
+
+  it.each([
+    [46.94, "46.9%", "bad"],
+    [46.96, "47.0%", "belowAverage"],
+    [51.94, "51.9%", "average"],
+    [51.96, "52.0%", "good"],
+    [64.96, "65.0%", "superUnicum"],
+  ] as const)("rates a win rate of %s by its shown %s as %s", (value, shown, tier) => {
+    expect(formatWinRate(value)).toBe(shown);
+    expect(winRateTier(value)).toBe(tier);
+    expect(statTier("winRate", value, null)).toBe(tier);
+  });
+
+  it.each([
+    [749.4, "749", "bad"],
+    [749.5, "750", "belowAverage"],
+    [1099.4, "1\u2009099", "belowAverage"],
+    [1099.6, "1\u2009100", "average"],
+    [2449.6, "2\u2009450", "superUnicum"],
+  ] as const)("rates a personal rating of %s by its shown %s as %s", (value, shown, tier) => {
+    expect(formatRating(value)).toBe(shown);
+    expect(personalRatingTier(value)).toBe(tier);
+    expect(statTier("personalRating", value, null)).toBe(tier);
+  });
+
+  it.each([
+    [599.4, "599", "bad"],
+    [599.5, "600", "belowAverage"],
+    [1099.4, "1\u2009099", "good"],
+    [1099.5, "1\u2009100", "veryGood"],
+  ] as const)("rates average damage of %s by its shown %s as %s", (value, shown, tier) => {
+    expect(formatDamage(value)).toBe(shown);
+    expect(damageTier(value, ratioExpected)).toBe(tier);
+  });
+
+  it.each([
+    [0.794, "0.79", "belowAverage"],
+    [0.796, "0.80", "average"],
+    [1.094, "1.09", "good"],
+    [1.096, "1.10", "veryGood"],
+  ] as const)("rates average frags of %s by its shown %s as %s", (value, shown, tier) => {
+    expect(formatFrags(value)).toBe(shown);
+    expect(fragsTier(value, ratioExpected)).toBe(tier);
+  });
+
+  it("highlights a row by the rounded value", () => {
+    const lines = { overall: line({ winRate: 46.96 }), ship: line({ winRate: 51.96, personalRating: 1099.6 }) };
+    expect(highlightTier("personalRating", lines, expected)).toBe("average");
+    expect(highlightTier("shipWinRate", lines, expected)).toBe("good");
+    expect(highlightTier("accountWinRate", lines, expected)).toBe("belowAverage");
   });
 });
 

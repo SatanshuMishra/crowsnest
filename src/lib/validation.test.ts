@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeVerifyFailure, validateApplicationId } from "./validation";
+import { describeInstallProblem, describeVerifyFailure, validateApplicationId } from "./validation";
 
 const VALID_ID = "0123456789abcdef0123456789abcdef";
 
@@ -53,5 +53,39 @@ describe("describeVerifyFailure", () => {
     const failure = describeVerifyFailure(new Error(reason));
     expect(failure.kind).toBe("network");
     expect(failure.message).not.toContain(VALID_ID);
+  });
+});
+
+describe("describeInstallProblem", () => {
+  it("says when the folder is gone", () => {
+    expect(describeInstallProblem("missing")).toBe("That folder no longer exists. Choose the game folder again.");
+  });
+
+  it("points to the folder that holds the game files", () => {
+    const message = describeInstallProblem("notAGameFolder");
+    expect(message).toContain("no World of Warships files");
+    expect(message).toContain("WorldOfWarships.exe and the bin folder");
+  });
+
+  it("asks to let a running game update finish when bin holds no build", () => {
+    const message = describeInstallProblem("noBuild");
+    expect(message).toContain("the bin folder holds no game build");
+    expect(message).toContain("let the update finish, then try again");
+  });
+
+  it("asks to try again when the check could not run", () => {
+    expect(describeInstallProblem("unavailable")).toBe("Crowsnest could not check that folder. Try again.");
+  });
+
+  it.each([new Error("ipc closed"), "something else", undefined, "toString"])(
+    "treats an unknown rejection %s as a check that could not run",
+    (error) => {
+      expect(describeInstallProblem(error)).toBe(describeInstallProblem("unavailable"));
+    },
+  );
+
+  it("gives each problem its own message", () => {
+    const messages = ["missing", "notAGameFolder", "noBuild", "unavailable"].map(describeInstallProblem);
+    expect(new Set(messages).size).toBe(4);
   });
 });

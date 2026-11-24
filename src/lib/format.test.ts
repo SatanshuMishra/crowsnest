@@ -3,6 +3,7 @@ import {
   clientVersionLabel,
   MISSING,
   THIN_SPACE,
+  displayedValue,
   formatDamage,
   formatFrags,
   formatInteger,
@@ -73,6 +74,25 @@ describe("stat formatters", () => {
     expect(placeholderFor("damage")).toBe(grouped("45 678"));
     expect(placeholderFor("winRate")).toBe("52.3%");
     expect(placeholderFor("frags")).toBe("0.85");
+  });
+});
+
+describe("displayedValue", () => {
+  it("rounds each kind to the precision its formatter shows", () => {
+    expect(displayedValue("winRate", 46.96)).toBe(47);
+    expect(displayedValue("winRate", 46.94)).toBe(46.9);
+    expect(displayedValue("personalRating", 1099.6)).toBe(1100);
+    expect(displayedValue("damage", 43999.5)).toBe(44000);
+    expect(displayedValue("frags", 1.096)).toBe(1.1);
+    expect(displayedValue("frags", 1.094)).toBe(1.09);
+    expect(displayedValue("battles", 12.4)).toBe(12);
+    expect(displayedValue("xp", 1234.5)).toBe(1235);
+  });
+
+  it("has no value for a missing one", () => {
+    expect(displayedValue("winRate", null)).toBeNull();
+    expect(displayedValue("frags", undefined)).toBeNull();
+    expect(displayedValue("damage", Number.NaN)).toBeNull();
   });
 });
 

@@ -2,6 +2,7 @@
   import UpdateNotice from "../UpdateNotice.svelte";
   import IconButton from "../ui/IconButton.svelte";
   import { backend } from "../../lib/backend";
+  import { focusViewHeading } from "../../lib/focus";
   import { mapName, matchType, regionLabel, regionName } from "../../lib/format";
   import { app } from "../../lib/state.svelte";
   import type { Phase, Snapshot } from "../../lib/types";
@@ -58,16 +59,18 @@
   </svg>
 
   <div class="match">
-    {#if battle}
-      <h1>
+    <h1 tabindex="-1" {@attach focusViewHeading}>
+      {#if battle}
         <span class="visually-hidden">Crowsnest, </span>{mapName(battle.arena.mapDisplayName, battle.arena.mapName)}
-      </h1>
+      {:else}
+        Crowsnest
+      {/if}
+    </h1>
+    {#if battle}
       <span class="mode">{matchType(battle.arena.gameType, battle.arena.matchGroup)}</span>
       {#if lastBattle}
         <span class="tag">Last battle</span>
       {/if}
-    {:else}
-      <h1>Crowsnest</h1>
     {/if}
     {#if region}
       <span class="chip" title="Server region: {regionName(region)}">
@@ -117,7 +120,8 @@
     align-items: baseline;
     gap: var(--space-2);
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
+    overflow-clip-margin: var(--space-1);
     white-space: nowrap;
   }
 

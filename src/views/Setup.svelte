@@ -5,6 +5,7 @@
   import InstallPicker from "../components/settings/InstallPicker.svelte";
   import Button from "../components/ui/Button.svelte";
   import Icon from "../components/ui/Icon.svelte";
+  import { focusViewHeading } from "../lib/focus";
   import { app } from "../lib/state.svelte";
 
   const DEVELOPERS_URL = "https://developers.wargaming.net/applications/";
@@ -34,7 +35,7 @@
 
     <section class="step" aria-labelledby="{id}-step">
       {#if needsApplicationId}
-        <h2 id="{id}-step">Add a Wargaming application ID</h2>
+        <h2 id="{id}-step" tabindex="-1" {@attach focusViewHeading}>Add a Wargaming application ID</h2>
         <p>
           Crowsnest reads public player statistics from the Wargaming API. The API needs a free application ID,
           which you can create as a Standalone application on
@@ -47,7 +48,7 @@
         </div>
         <ApplicationIdField />
       {:else}
-        <h2 id="{id}-step">Find World of Warships</h2>
+        <h2 id="{id}-step" tabindex="-1" {@attach focusViewHeading}>Find World of Warships</h2>
         <p>
           Crowsnest could not find the game in the usual places: Wargaming Game Center, the Windows registry, Steam
           libraries and C:\Games. Detect it again, or choose its folder yourself.

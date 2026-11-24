@@ -8,6 +8,7 @@ import {
   RESTART_FAILED_MESSAGE,
   UpdateStore,
   reduceUpdate,
+  updateAnnouncement,
   type UpdateState,
 } from "./updates.svelte";
 
@@ -139,6 +140,38 @@ describe("reduceUpdate", () => {
     expect(reduceUpdate(available, { type: "dismissed" })).toEqual(IDLE);
     expect(reduceUpdate({ status: "upToDate" }, { type: "dismissed" })).toEqual(IDLE);
     expect(reduceUpdate(downloading, { type: "dismissed" })).toBe(downloading);
+  });
+});
+
+describe("updateAnnouncement", () => {
+  it("announces an offer, the start of a download, and the installed update", () => {
+    expect(updateAnnouncement(available)).toBe("Crowsnest 1.4.0 is available.");
+    expect(updateAnnouncement(downloading)).toBe("Downloading Crowsnest 1.4.0.");
+    expect(updateAnnouncement({ status: "ready", version: "1.4.0", error: null })).toBe(
+      "Crowsnest 1.4.0 is installed. Restart to update.",
+    );
+  });
+
+  it("announces a failed install and a failed restart", () => {
+    const failed = reduceUpdate(downloading, { type: "installFailed", message: INSTALL_FAILED_MESSAGE });
+    expect(updateAnnouncement(failed)).toBe("The update could not be installed. Try again.");
+    const stuck: UpdateState = { status: "ready", version: "1.4.0", error: RESTART_FAILED_MESSAGE };
+    expect(updateAnnouncement(stuck)).toBe(RESTART_FAILED_MESSAGE);
+  });
+
+  it("stays the same while a download makes progress", () => {
+    const started = progress(downloading, { event: "Started", data: { contentLength: 1000 } });
+    const halfway = progress(started, { event: "Progress", data: { chunkLength: 500 } });
+    const finished = progress(halfway, { event: "Finished" });
+    expect(new Set([downloading, started, halfway, finished].map(updateAnnouncement))).toEqual(
+      new Set(["Downloading Crowsnest 1.4.0."]),
+    );
+  });
+
+  it("says nothing outside an offer", () => {
+    const quiet: UpdateState[] = [IDLE, { status: "checking", silent: false }, { status: "upToDate" }];
+    expect(quiet.map(updateAnnouncement)).toEqual(["", "", ""]);
+    expect(updateAnnouncement({ status: "error", message: CHECK_FAILED_MESSAGE })).toBe("");
   });
 });
 

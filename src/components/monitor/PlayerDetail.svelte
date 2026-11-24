@@ -31,12 +31,30 @@
   let dialog = $state<HTMLDialogElement>();
   let linkError = $state<string | null>(null);
 
+  type Split = "all" | "solo" | "div2" | "div3";
+
   interface LineColumn {
     id: string;
     name: string;
+    title: string;
+    spoken: string;
     line: StatLine | null;
     expected: ExpectedStats | null;
   }
+
+  interface LineGroup {
+    id: string;
+    name: string;
+    pending: boolean;
+    columns: LineColumn[];
+  }
+
+  const SPLITS: ReadonlyArray<{ id: Split; name: string; title: string; spoken: string }> = [
+    { id: "all", name: "All", title: "All random battles", spoken: "all battles" },
+    { id: "solo", name: "Solo", title: "Random battles played without a division", spoken: "solo" },
+    { id: "div2", name: "Div 2", title: "Random battles in a two-player division", spoken: "two-player division" },
+    { id: "div3", name: "Div 3", title: "Random battles in a three-player division", spoken: "three-player division" },
+  ];
 
   const ROWS: ReadonlyArray<{ kind: StatKind; name: string }> = [
     { kind: "battles", name: "Battles" },
@@ -59,17 +77,47 @@
   const stats = $derived(player?.stats ?? null);
   const badge = $derived(player?.ship ? shipClassBadge(player.ship.class) : null);
   const links = $derived(player ? playerLinks(region, player.stats, player.name) : []);
-  const lineColumns = $derived.by<LineColumn[]>(() => {
+  const groups = $derived.by<LineGroup[]>(() => {
     if (!player || stats?.kind !== "loaded") {
       return [];
     }
-    return [
-      { id: "overall", name: "Overall", line: stats.overall, expected: null },
-      { id: "overall-solo", name: "Solo", line: stats.overallSolo, expected: null },
-      { id: "ship", name: "Ship", line: stats.ship, expected: player.expected },
-      { id: "ship-solo", name: "Ship solo", line: stats.shipSolo, expected: player.expected },
-    ];
+    const account: LineGroup = {
+      id: "account",
+      name: "Account",
+      pending: false,
+      columns: columnsFor(
+        "account",
+        { all: stats.overall, solo: stats.overallSolo, div2: stats.overallDiv2, div3: stats.overallDiv3 },
+        null,
+      ),
+    };
+    const ship: LineGroup = {
+      id: "ship",
+      name: "This ship",
+      pending: stats.shipState === "pending",
+      columns: columnsFor(
+        "ship",
+        { all: stats.ship, solo: stats.shipSolo, div2: stats.shipDiv2, div3: stats.shipDiv3 },
+        player.expected,
+      ),
+    };
+    return stats.ship !== null || ship.pending ? [account, ship] : [account];
   });
+
+  function columnsFor(
+    group: string,
+    lines: Record<Split, StatLine | null>,
+    expected: ExpectedStats | null,
+  ): LineColumn[] {
+    return SPLITS.map((split) => ({
+      id: `${group}-${split.id}`,
+      name: split.name,
+      title: split.title,
+      spoken: split.spoken,
+      line: lines[split.id],
+      expected,
+    }));
+  }
 
   $effect(() => {
     if (!dialog) {
@@ -130,47 +178,52 @@
       </header>
 
       {#if stats.kind === "loaded"}
-        <table class="lines">
-          <caption class="visually-hidden">Random battle statistics</caption>
-          <thead>
-            <tr>
-              <td></td>
-              {#each lineColumns as column (column.id)}
-                <th scope="col" class="num">{column.name}</th>
-              {/each}
-            </tr>
-          </thead>
-          <tbody>
-            {#each ROWS as row (row.kind)}
+        {#each groups as group (group.id)}
+          <table class="lines">
+            <caption>{group.name}</caption>
+            <thead>
               <tr>
-                <th scope="row">{row.name}</th>
-                {#each lineColumns as column (column.id)}
-                  {@const value = column.line ? lineValue(column.line, row.kind) : null}
-                  <StatCell
-                    kind={row.kind}
-                    label="{row.name}, {column.name.toLowerCase()}"
-                    {value}
-                    tier={statTier(row.kind, value, column.expected)}
-                    rated={rated(column, row.kind)}
-                    colored={settings.coloredValues}
-                  />
+                <td></td>
+                {#each group.columns as column (column.id)}
+                  <th scope="col" class="num" title={column.title}>{column.name}</th>
                 {/each}
               </tr>
-            {/each}
-            <tr>
-              <th scope="row">Survival rate</th>
-              {#each lineColumns as column (column.id)}
-                <td class="num plain">{formatWinRate(column.line?.survivalRate)}</td>
+            </thead>
+            <tbody>
+              {#each ROWS as row (row.kind)}
+                <tr>
+                  <th scope="row">{row.name}</th>
+                  {#each group.columns as column (column.id)}
+                    {@const value = column.line ? lineValue(column.line, row.kind) : null}
+                    <StatCell
+                      kind={row.kind}
+                      label="{row.name}, {group.name.toLowerCase()}, {column.spoken}"
+                      {value}
+                      tier={statTier(row.kind, value, column.expected)}
+                      rated={rated(column, row.kind)}
+                      colored={settings.coloredValues}
+                      pending={group.pending}
+                    />
+                  {/each}
+                </tr>
               {/each}
-            </tr>
-          </tbody>
-        </table>
-        {#if stats?.kind === "loaded" && stats.shipState === "unavailable"}
+              <tr>
+                <th scope="row">Survival rate</th>
+                {#each group.columns as column (column.id)}
+                  <td class="num plain">{formatWinRate(column.line?.survivalRate)}</td>
+                {/each}
+              </tr>
+            </tbody>
+          </table>
+        {/each}
+        {#if stats.shipState === "unavailable"}
           <p class="note">Wargaming did not return ship statistics for this player. Press Refresh to try again.</p>
+        {:else if stats.shipState === "ready" && stats.ship === null}
+          <p class="note">This player has no random battles in this ship yet.</p>
         {/if}
         <p class="note">
-          Ship columns cover this ship only; solo columns leave out battles played in a division. Personal rating uses
-          expected values from wows-numbers.com.
+          Solo leaves out battles played in a division. Div 2 and Div 3 count only battles in a division of two or three
+          players. Personal rating uses expected values from wows-numbers.com.
         </p>
       {:else if stats.kind === "pending"}
         <p class="state" aria-busy="true">Loading statistics from Wargaming.</p>
@@ -323,6 +376,12 @@
   .lines {
     width: 100%;
     border-collapse: collapse;
+  }
+
+  .lines caption {
+    padding-bottom: var(--space-2);
+    font-size: var(--fs-md);
+    text-align: left;
   }
 
   .lines th {

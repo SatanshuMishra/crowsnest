@@ -33,7 +33,7 @@
     "targets": ["nsis"],
     "createUpdaterArtifacts": false,
     "publisher": "Satanshu Mishra",
-    "copyright": "Copyright (c) 2026 Satanshu Mishra. MIT License.",
+    "copyright": "Copyright (c) 2026 Satanshu Mishra. Apache License 2.0.",
     "homepage": "https://github.com/SatanshuMishra/crowsnest",
     "category": "Utility",
     "shortDescription": "Private, local-first match monitor for World of Warships",

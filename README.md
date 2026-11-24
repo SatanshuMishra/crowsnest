@@ -14,9 +14,10 @@ When a battle loads, Crowsnest shows every player on both teams with their ship,
 - Picks up a new battle within a second of the game writing it, then fills in stats as they arrive.
 - Account and current-ship statistics, with optional solo (unplatooned) numbers.
 - Personal rating using the wows-numbers.com formula and expected values.
-- Colour tiers that meet contrast guidelines in dark and light themes, with the tier name always available in text.
+- Colour tiers in three palettes, Muted, Vibrant and Colour-blind friendly, that meet contrast guidelines in dark and light themes, with the tier name always available in text.
 - Team averages as mean, weighted, or median.
-- Compact and comfortable densities, three text sizes, tray mode, always on top.
+- Compact and comfortable densities, three text sizes, tray mode, and a title-bar pin for always on top.
+- A short appearance setup on first launch, and live previews of each appearance option in Settings.
 - Signed automatic updates from GitHub Releases.
 
 ## Privacy

@@ -23,6 +23,22 @@
           "damage_dealt": 23280000,
           "frags": 281,
           "xp": 400800
+        },
+        "pvp_div2": {
+          "battles": 50,
+          "wins": 32,
+          "survived_battles": 22,
+          "damage_dealt": 5100000,
+          "frags": 65,
+          "xp": 90000
+        },
+        "pvp_div3": {
+          "battles": 20,
+          "wins": 13,
+          "survived_battles": 9,
+          "damage_dealt": 2000000,
+          "frags": 26,
+          "xp": 36200
         }
       },
       {
@@ -35,7 +51,8 @@
           "frags": 38,
           "xp": 52800
         },
-        "pvp_solo": null
+        "pvp_solo": null,
+        "pvp_div2": null
       },
       {
         "ship_id": 4074649552,

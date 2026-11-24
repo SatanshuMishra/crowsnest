@@ -255,8 +255,12 @@ pub enum PlayerStats {
         account_id: u64,
         overall: StatLine,
         overall_solo: Option<StatLine>,
+        overall_div2: Option<StatLine>,
+        overall_div3: Option<StatLine>,
         ship: Option<StatLine>,
         ship_solo: Option<StatLine>,
+        ship_div2: Option<StatLine>,
+        ship_div3: Option<StatLine>,
         ship_state: ShipStatsState,
         created_at: Option<i64>,
     },
@@ -373,8 +377,12 @@ mod tests {
             account_id: 7,
             overall: line,
             overall_solo: None,
+            overall_div2: None,
+            overall_div3: None,
             ship: None,
             ship_solo: None,
+            ship_div2: None,
+            ship_div3: None,
             ship_state: ShipStatsState::Unavailable,
             created_at: None,
         };
@@ -383,6 +391,8 @@ mod tests {
         assert_eq!(json["accountId"], 7);
         assert!(json.get("overallSolo").is_some());
         assert!(json.get("shipSolo").is_some());
+        assert!(json.get("overallDiv2").is_some());
+        assert!(json.get("shipDiv3").is_some());
         assert!(json.get("createdAt").is_some());
         assert_eq!(json["shipState"], "unavailable");
         let hidden = serde_json::to_value(PlayerStats::Hidden { account_id: 3 }).unwrap();

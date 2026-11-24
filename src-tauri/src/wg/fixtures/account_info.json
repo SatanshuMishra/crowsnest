@@ -25,6 +25,22 @@
           "damage_dealt": 140120400,
           "frags": 3350,
           "xp": 3844000
+        },
+        "pvp_div2": {
+          "battles": 800,
+          "wins": 462,
+          "survived_battles": 330,
+          "damage_dealt": 39200000,
+          "frags": 920,
+          "xp": 1020000
+        },
+        "pvp_div3": {
+          "battles": 310,
+          "wins": 179,
+          "survived_battles": 130,
+          "damage_dealt": 15181900,
+          "frags": 360,
+          "xp": 398500
         }
       }
     },
@@ -47,7 +63,9 @@
           "frags": 6,
           "xp": 9800
         },
-        "pvp_solo": null
+        "pvp_solo": null,
+        "pvp_div2": null,
+        "pvp_div3": null
       }
     },
     "500100004": null

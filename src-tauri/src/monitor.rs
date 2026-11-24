@@ -622,20 +622,18 @@ impl Roster {
             (Some(_), Some(_)) => ShipStatsState::Ready,
             (Some(_), None) => ShipStatsState::Unavailable,
         };
-        let overall_rating = expected.zip(records).and_then(|(expected, records)| {
-            let per_ship: Vec<(u64, Totals)> = records
-                .iter()
-                .map(|record| (record.ship_id, record.pvp))
-                .collect();
-            pr::personal_rating(&per_ship, expected)
-        });
-        let solo_rating = expected.zip(records).and_then(|(expected, records)| {
-            let per_ship: Vec<(u64, Totals)> = records
-                .iter()
-                .filter_map(|record| record.pvp_solo.map(|solo| (record.ship_id, solo)))
-                .collect();
-            pr::personal_rating(&per_ship, expected)
-        });
+        let rating_over = |pick: fn(&ShipRecord) -> Option<Totals>| {
+            expected.zip(records).and_then(|(expected, records)| {
+                let per_ship: Vec<(u64, Totals)> = records
+                    .iter()
+                    .filter_map(|record| pick(record).map(|totals| (record.ship_id, totals)))
+                    .collect();
+                pr::personal_rating(&per_ship, expected)
+            })
+        };
+        let account_line = |totals: Option<Totals>, pick: fn(&ShipRecord) -> Option<Totals>| {
+            totals.map(|totals| StatLine::from_totals(totals, rating_over(pick)))
+        };
         let ship_record = records.and_then(|records| {
             records
                 .iter()
@@ -648,13 +646,19 @@ impl Roster {
         };
         PlayerStats::Loaded {
             account_id: account.account_id,
-            overall: StatLine::from_totals(pvp, overall_rating),
-            overall_solo: account
-                .pvp_solo
-                .map(|solo| StatLine::from_totals(solo, solo_rating)),
+            overall: StatLine::from_totals(pvp, rating_over(|record| Some(record.pvp))),
+            overall_solo: account_line(account.pvp_solo, |record| record.pvp_solo),
+            overall_div2: account_line(account.pvp_div2, |record| record.pvp_div2),
+            overall_div3: account_line(account.pvp_div3, |record| record.pvp_div3),
             ship: ship_record.map(|record| ship_line(record.pvp)),
             ship_solo: ship_record
                 .and_then(|record| record.pvp_solo)
+                .map(ship_line),
+            ship_div2: ship_record
+                .and_then(|record| record.pvp_div2)
+                .map(ship_line),
+            ship_div3: ship_record
+                .and_then(|record| record.pvp_div3)
                 .map(ship_line),
             ship_state,
             created_at: account.created_at,
@@ -940,6 +944,8 @@ mod tests {
                         ..Totals::default()
                     }),
                     pvp_solo: None,
+                    pvp_div2: None,
+                    pvp_div3: None,
                 },
             )]),
             clans: HashMap::new(),
@@ -1013,6 +1019,8 @@ mod tests {
                         ..Totals::default()
                     }),
                     pvp_solo: None,
+                    pvp_div2: None,
+                    pvp_div3: None,
                 },
             )]),
             clans: HashMap::new(),
@@ -1049,6 +1057,8 @@ mod tests {
                 ..Totals::default()
             },
             pvp_solo: None,
+            pvp_div2: None,
+            pvp_div3: None,
         };
         let fetched = HashMap::from([(5, vec![other_ship])]);
         let stats =
@@ -1061,6 +1071,54 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn division_lines_come_from_the_account_and_the_ship_in_battle() {
+        let base = visible_roster();
+        let account = AccountRecord {
+            pvp_div2: Some(Totals {
+                battles: 4,
+                wins: 3,
+                ..Totals::default()
+            }),
+            ..base.accounts[&5].clone()
+        };
+        let roster = Roster {
+            accounts: HashMap::from([(5, account)]),
+            ..base
+        };
+        let in_battle = ShipRecord {
+            ship_id: 1,
+            pvp: Totals {
+                battles: 9,
+                wins: 5,
+                ..Totals::default()
+            },
+            pvp_solo: None,
+            pvp_div2: None,
+            pvp_div3: Some(Totals {
+                battles: 2,
+                wins: 2,
+                ..Totals::default()
+            }),
+        };
+        let fetched = HashMap::from([(5, vec![in_battle])]);
+        let stats = roster.stats_for(&vehicle("Seen", Relation::Ally, 1), Some(&fetched), None);
+        let PlayerStats::Loaded {
+            overall_div2,
+            overall_div3,
+            ship_div2,
+            ship_div3,
+            ..
+        } = stats
+        else {
+            panic!("expected loaded stats");
+        };
+        assert_eq!(overall_div2.map(|line| line.battles), Some(4));
+        assert_eq!(overall_div3, None);
+        assert_eq!(ship_div2, None);
+        assert_eq!(ship_div3.map(|line| line.battles), Some(2));
     }
 
     #[test]

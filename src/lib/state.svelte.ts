@@ -3,12 +3,89 @@ import type { AppInfo, Settings, Snapshot } from "./types";
 
 export type View = "monitor" | "settings";
 
+export type SaveSettings = (settings: Settings) => Promise<Settings>;
+
+export class SettingsStore {
+  #current = $state<Settings | null>(null);
+  #saveError = $state<string | null>(null);
+  #confirmed: Settings | null = null;
+  #confirmedRequest = 0;
+  #latestRequest = 0;
+  #latestFailed = false;
+  readonly #save: SaveSettings;
+
+  constructor(save: SaveSettings) {
+    this.#save = save;
+  }
+
+  get current(): Settings | null {
+    return this.#current;
+  }
+
+  get saveError(): string | null {
+    return this.#saveError;
+  }
+
+  load(settings: Settings): void {
+    this.#current = settings;
+    this.#confirmed = settings;
+  }
+
+  async update(change: Partial<Settings>): Promise<boolean> {
+    if (!this.#current) {
+      return false;
+    }
+    const request = this.#latestRequest + 1;
+    const next: Settings = { ...this.#current, ...change };
+    this.#latestRequest = request;
+    this.#latestFailed = false;
+    this.#current = next;
+    try {
+      this.#confirm(request, await this.#save(next));
+      return true;
+    } catch (error) {
+      this.#reject(request, String(error));
+      return false;
+    }
+  }
+
+  #confirm(request: number, saved: Settings): void {
+    if (request < this.#confirmedRequest) {
+      return;
+    }
+    this.#confirmed = saved;
+    this.#confirmedRequest = request;
+    if (request === this.#latestRequest) {
+      this.#current = saved;
+      this.#saveError = null;
+    } else if (this.#latestFailed) {
+      this.#current = saved;
+    }
+  }
+
+  #reject(request: number, message: string): void {
+    if (request !== this.#latestRequest) {
+      return;
+    }
+    this.#latestFailed = true;
+    this.#current = this.#confirmed;
+    this.#saveError = message;
+  }
+}
+
 class AppStore {
   snapshot = $state<Snapshot | null>(null);
-  settings = $state<Settings | null>(null);
   info = $state<AppInfo | null>(null);
   view = $state<View>("monitor");
-  saveError = $state<string | null>(null);
+  readonly #settings = new SettingsStore(backend.saveSettings);
+
+  get settings(): Settings | null {
+    return this.#settings.current;
+  }
+
+  get saveError(): string | null {
+    return this.#settings.saveError;
+  }
 
   async start(): Promise<() => void> {
     const unlisten = await backend.onSnapshot((next) => {
@@ -20,27 +97,13 @@ class AppStore {
       backend.appInfo(),
     ]);
     this.snapshot = this.snapshot ?? snapshot;
-    this.settings = settings;
+    this.#settings.load(settings);
     this.info = info;
     return unlisten;
   }
 
-  async update(change: Partial<Settings>): Promise<boolean> {
-    if (!this.settings) {
-      return false;
-    }
-    const next: Settings = { ...this.settings, ...change };
-    const previous = this.settings;
-    this.settings = next;
-    try {
-      this.settings = await backend.saveSettings(next);
-      this.saveError = null;
-      return true;
-    } catch (error) {
-      this.settings = previous;
-      this.saveError = String(error);
-      return false;
-    }
+  update(change: Partial<Settings>): Promise<boolean> {
+    return this.#settings.update(change);
   }
 }
 

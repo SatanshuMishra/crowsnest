@@ -32,7 +32,7 @@ pub async fn save_settings(
         .save(&settings)
         .map_err(|error| error.to_string())?;
     shell::apply_window_preferences(&app, &settings);
-    state.monitor.reconfigure(settings.clone());
+    state.monitor.apply_settings(settings.clone());
     Ok(settings)
 }
 

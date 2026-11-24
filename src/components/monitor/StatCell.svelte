@@ -22,6 +22,8 @@
     pending = false,
   }: Props = $props();
 
+  const COLOURED_KINDS: ReadonlySet<StatKind> = new Set<StatKind>(["winRate", "personalRating"]);
+
   const text = $derived(formatStat(kind, value));
   const spoken = $derived.by(() => {
     if (text === MISSING) {
@@ -29,7 +31,7 @@
     }
     return rated ? `${text}, ${tierName(tier)}` : text;
   });
-  const color = $derived(colored && rated && tier ? tierColor(tier) : undefined);
+  const color = $derived(colored && rated && tier && COLOURED_KINDS.has(kind) ? tierColor(tier) : undefined);
 </script>
 
 {#if pending}
@@ -45,14 +47,20 @@
 <style>
   .stat {
     width: 1%;
-    padding: 0 var(--space-1);
+    padding: 0 var(--cell-pad);
     border-bottom: 1px solid var(--border);
     text-align: right;
     white-space: nowrap;
   }
 
-  .stat:last-child {
-    padding-right: var(--space-3);
+  .stat:not(:has(.skeleton)) {
+    animation: value-in var(--duration-base) var(--ease-out);
+  }
+
+  @keyframes value-in {
+    from {
+      opacity: 0;
+    }
   }
 
   .missing {
@@ -62,7 +70,7 @@
   .skeleton {
     display: inline-block;
     line-height: 1;
-    border-radius: var(--radius-sm);
+    border-radius: 2px;
     background: var(--surface-hover);
     vertical-align: middle;
     animation: pulse calc(var(--duration-base) * 4) var(--ease-out) infinite alternate;

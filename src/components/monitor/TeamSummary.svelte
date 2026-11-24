@@ -45,7 +45,7 @@
     },
     {
       id: "account-wr",
-      short: "Acc WR",
+      short: "Account WR",
       name: `Team account win rate${suffix}`,
       text: formatWinRate(summary.accountWinRate),
       tier: winRateTier(summary.accountWinRate),
@@ -89,25 +89,25 @@
 
 <style>
   .summary {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-4);
-    padding: var(--space-2) var(--space-3);
-    border-bottom: 1px solid var(--border);
-    border-top: 2px solid var(--team-accent, var(--accent));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: var(--space-2) var(--space-4);
+    padding-bottom: var(--space-4);
   }
 
   h2 {
     margin: 0;
-    color: var(--team-accent, var(--accent));
     font-family: var(--font-display);
-    font-size: var(--fs-lg);
-    font-weight: 600;
+    font-size: var(--fs-xl);
+    font-weight: var(--weight-strong);
+    letter-spacing: var(--tracking-display);
   }
 
   dl {
     display: flex;
+    grid-column: 1 / -1;
+    grid-row: 2;
     flex-wrap: wrap;
     gap: var(--space-1) var(--space-4);
     margin: 0;
@@ -121,24 +121,19 @@
 
   dt {
     color: var(--text-muted);
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    text-transform: uppercase;
+    font-size: var(--fs-sm);
   }
 
   dd {
     margin: 0;
     font-size: var(--fs-md);
-    font-weight: 600;
   }
 
   .coverage {
-    margin: 0 0 0 auto;
-    color: var(--text-muted);
-    font-size: var(--fs-sm);
-  }
-
-  .method {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
     color: var(--text-faint);
+    font-size: var(--fs-sm);
   }
 </style>

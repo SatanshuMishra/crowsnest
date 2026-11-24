@@ -17,8 +17,16 @@
     onclose: () => void;
   }
 
-  let { player, region, settings, onclose }: Props = $props();
+  let { player: requested, region, settings, onclose }: Props = $props();
   const id = $props.id();
+
+  let player = $state.raw<Player | null>(null);
+
+  $effect.pre(() => {
+    if (requested) {
+      player = requested;
+    }
+  });
 
   let dialog = $state<HTMLDialogElement>();
   let linkError = $state<string | null>(null);
@@ -67,10 +75,10 @@
     if (!dialog) {
       return;
     }
-    if (player && !dialog.open) {
+    if (requested && !dialog.open) {
       linkError = null;
       dialog.showModal();
-    } else if (!player && dialog.open) {
+    } else if (!requested && dialog.open) {
       dialog.close();
     }
   });
@@ -209,45 +217,64 @@
   .sheet {
     position: fixed;
     inset: 0 0 0 auto;
-    width: min(100vw, calc(var(--space-6) * 13));
+    width: min(100vw, 26rem);
     max-width: 100vw;
     height: 100%;
     max-height: 100%;
     margin: 0;
     padding: 0;
     border: 0;
-    border-left: 1px solid var(--border-strong);
+    border-left: 1px solid var(--border);
     background: var(--surface-raised);
     color: var(--text);
     box-shadow: var(--shadow-pop);
   }
 
+  .sheet,
+  .sheet::backdrop {
+    transition:
+      opacity var(--duration-base) var(--ease-out),
+      translate var(--duration-base) var(--ease-out),
+      overlay var(--duration-base) allow-discrete,
+      display var(--duration-base) allow-discrete;
+  }
+
+  .sheet {
+    opacity: 0;
+    translate: var(--space-5) 0;
+  }
+
   .sheet[open] {
-    animation: slide-in var(--duration-base) var(--ease-out);
+    opacity: 1;
+    translate: 0 0;
   }
 
   .sheet::backdrop {
-    background: color-mix(in srgb, var(--bg) 50%, transparent);
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    opacity: 0;
   }
 
-  @keyframes slide-in {
-    from {
-      transform: translateX(var(--space-5));
+  .sheet[open]::backdrop {
+    opacity: 1;
+  }
+
+  @starting-style {
+    .sheet[open] {
       opacity: 0;
+      translate: var(--space-5) 0;
     }
 
-    to {
-      transform: none;
-      opacity: 1;
+    .sheet[open]::backdrop {
+      opacity: 0;
     }
   }
 
   .body {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-5);
     min-height: 100%;
-    padding: var(--space-4);
+    padding: var(--space-5);
   }
 
   header {
@@ -258,45 +285,39 @@
   }
 
   .heading {
+    display: grid;
+    gap: var(--space-1);
     min-width: 0;
   }
 
   .relation {
     margin: 0;
     color: var(--text-muted);
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-
-  .relation.ally {
-    color: var(--ally);
-  }
-
-  .relation.enemy {
-    color: var(--enemy);
+    font-size: var(--fs-sm);
   }
 
   h2 {
-    margin: var(--space-1) 0 0;
+    margin: 0;
     font-family: var(--font-display);
     font-size: var(--fs-xl);
-    font-weight: 600;
+    font-weight: var(--weight-strong);
+    letter-spacing: var(--tracking-display);
     overflow-wrap: anywhere;
   }
 
   .clan {
-    color: var(--text-muted);
+    color: var(--text-faint);
+    font-weight: var(--weight-regular);
   }
 
   .ship {
-    margin: var(--space-1) 0 0;
+    margin: 0;
     color: var(--text-muted);
     font-size: var(--fs-md);
   }
 
-  .tier {
-    font-weight: 600;
+  .class-name {
+    margin-left: var(--space-1);
   }
 
   .lines {
@@ -305,18 +326,28 @@
   }
 
   .lines th {
-    padding: var(--space-1) var(--space-2);
+    padding: 0 var(--cell-pad);
     border-bottom: 1px solid var(--border);
     color: var(--text-muted);
     font-size: var(--fs-sm);
-    font-weight: 600;
+    font-weight: var(--weight-regular);
     text-align: left;
     white-space: nowrap;
   }
 
+  .lines th:first-child {
+    padding-left: 0;
+  }
+
   .lines thead th {
+    padding-bottom: var(--space-2);
+    border-bottom-color: var(--border-strong);
     font-size: var(--fs-xs);
     text-align: right;
+  }
+
+  .lines thead td {
+    border-bottom: 1px solid var(--border-strong);
   }
 
   .lines tr {
@@ -327,8 +358,12 @@
     font-size: var(--fs-md);
   }
 
+  .lines :global(td:last-child) {
+    padding-right: 0;
+  }
+
   .plain {
-    padding: 0 var(--space-2);
+    padding: 0 var(--cell-pad);
     border-bottom: 1px solid var(--border);
     text-align: right;
     white-space: nowrap;
@@ -342,9 +377,6 @@
 
   .state {
     margin: 0;
-    padding: var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
     color: var(--text-muted);
     font-size: var(--fs-md);
   }
@@ -355,9 +387,13 @@
     gap: var(--space-2);
   }
 
+  .with-icon :global(svg) {
+    flex: none;
+    margin-top: 0.125em;
+  }
+
   .error {
     color: var(--text);
-    border-color: var(--danger);
   }
 
   .error :global(svg) {
@@ -369,14 +405,15 @@
     flex-direction: column;
     gap: var(--space-2);
     margin-top: auto;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
   }
 
   h3 {
     margin: 0;
     color: var(--text-muted);
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    text-transform: uppercase;
+    font-size: var(--fs-sm);
+    font-weight: var(--weight-regular);
   }
 
   .link-row {

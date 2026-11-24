@@ -52,22 +52,24 @@
     <main class="content">
       <StatusView {snapshot} {settings} {battleShown} />
       {#if battle && battleShown}
-        <div class="teams">
-          <TeamTable
-            side="allies"
-            title="Allies"
-            players={battle.allies.players}
-            {settings}
-            onopen={(player, row) => openPlayer("allies", player, row)}
-          />
-          <TeamTable
-            side="enemies"
-            title="Enemies"
-            players={battle.enemies.players}
-            {settings}
-            onopen={(player, row) => openPlayer("enemies", player, row)}
-          />
-        </div>
+        {#key battle.id}
+          <div class="teams">
+            <TeamTable
+              side="allies"
+              title="Allies"
+              players={battle.allies.players}
+              {settings}
+              onopen={(player, row) => openPlayer("allies", player, row)}
+            />
+            <TeamTable
+              side="enemies"
+              title="Enemies"
+              players={battle.enemies.players}
+              {settings}
+              onopen={(player, row) => openPlayer("enemies", player, row)}
+            />
+          </div>
+        {/key}
       {/if}
     </main>
     <PlayerDetail player={selectedPlayer} {region} {settings} onclose={closePlayer} />
@@ -85,24 +87,33 @@
     display: flex;
     flex: 1;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: var(--space-5);
     min-height: 0;
-    padding: var(--space-2) var(--space-3) var(--space-3);
+    padding: var(--space-5) var(--space-5) var(--space-4);
     overflow: auto;
   }
 
   .teams {
     display: grid;
     flex: 1;
+    animation: teams-in calc(var(--duration-base) * 1.25) var(--ease-out);
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-3);
+    gap: var(--space-6);
     min-height: 0;
+  }
+
+  @keyframes teams-in {
+    from {
+      opacity: 0;
+      translate: 0 var(--space-1);
+    }
   }
 
   @media (width < 1100px) {
     .teams {
       flex: none;
       grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-6);
     }
   }
 </style>

@@ -2,7 +2,8 @@
   import UpdateNotice from "../UpdateNotice.svelte";
   import IconButton from "../ui/IconButton.svelte";
   import { backend } from "../../lib/backend";
-  import { mapName, matchType, regionLabel, regionName } from "../../lib/format";
+  import { matchType, regionLabel, regionName } from "../../lib/format";
+  import { REFRESH_MIN_SPIN_MS, canRefresh, cooldownSeconds, refreshLabel } from "../../lib/refresh";
   import { app } from "../../lib/state.svelte";
   import type { Phase, Snapshot } from "../../lib/types";
 
@@ -23,22 +24,57 @@
     needsApplicationId: { label: "Setup needed", tone: "attention" },
   };
 
+  const CLOCK_TICK_MS = 250;
+
   let refreshing = $state(false);
   let refreshError = $state<string | null>(null);
+  let lastRefreshAt = $state<number | null>(null);
+  let now = $state(performance.now());
 
   const battle = $derived(snapshot.battle);
   const region = $derived(battle?.region ?? snapshot.install?.region ?? null);
   const lastBattle = $derived(battle !== null && snapshot.phase === "waiting");
   const status = $derived(STATUS[snapshot.phase]);
+  const availability = $derived({
+    hasBattle: battle !== null,
+    busy: refreshing || snapshot.phase === "loading",
+    cooldown: cooldownSeconds(lastRefreshAt, now),
+  });
+
+  $effect(() => {
+    const since = lastRefreshAt;
+    if (since === null) {
+      return;
+    }
+    const timer = setInterval(() => {
+      now = performance.now();
+      if (cooldownSeconds(since, now) === 0) {
+        clearInterval(timer);
+      }
+    }, CLOCK_TICK_MS);
+    return () => clearInterval(timer);
+  });
+
+  function pause(milliseconds: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, Math.max(milliseconds, 0)));
+  }
 
   async function refresh() {
+    if (!canRefresh(availability)) {
+      return;
+    }
+    const startedAt = performance.now();
     refreshing = true;
     refreshError = null;
+    lastRefreshAt = startedAt;
+    now = startedAt;
     try {
       await backend.refresh();
     } catch (error) {
       refreshError = String(error);
+      lastRefreshAt = null;
     } finally {
+      await pause(REFRESH_MIN_SPIN_MS - (performance.now() - startedAt));
       refreshing = false;
     }
   }
@@ -49,20 +85,11 @@
 </script>
 
 <header class="top-bar">
-  <svg class="logo" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
-    <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.6" />
-    <circle cx="12" cy="12" r="5.25" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.55" />
-    <path d="M12 12 12 2.5A9.5 9.5 0 0 1 20.23 7.25Z" fill="currentColor" opacity="0.3" />
-    <path d="M12 12 20.23 7.25" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-    <circle cx="14.6" cy="7.6" r="1.2" fill="currentColor" />
-  </svg>
-
   <div class="match">
     {#if battle}
       <h1>
-        <span class="visually-hidden">Crowsnest, </span>{mapName(battle.arena.mapDisplayName, battle.arena.mapName)}
+        <span class="visually-hidden">Crowsnest, </span>{matchType(battle.arena.gameType, battle.arena.matchGroup)}
       </h1>
-      <span class="mode">{matchType(battle.arena.gameType, battle.arena.matchGroup)}</span>
       {#if lastBattle}
         <span class="tag">Last battle</span>
       {/if}
@@ -70,14 +97,17 @@
       <h1>Crowsnest</h1>
     {/if}
     {#if region}
-      <span class="chip" title="Server region: {regionName(region)}">
-        <span class="visually-hidden">Server region </span>{regionLabel(region)}
-      </span>
+      <span class="chip" title="Game server: {regionName(region)}">{regionLabel(region)} server</span>
     {/if}
   </div>
 
   <p class="status {status.tone}" aria-live="polite" aria-atomic="true">
-    <span class="dot" aria-hidden="true"></span>{status.label}
+    <svg class="radar" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+      <circle class="ring" cx="8" cy="8" r="6.5" />
+      <path class="sweep" d="M8 8V1.5a6.5 6.5 0 0 1 5.63 3.25Z" />
+      <circle class="core" cx="8" cy="8" r="2.25" />
+    </svg>
+    {status.label}
   </p>
 
   <div class="actions">
@@ -85,10 +115,15 @@
     {#if refreshError}
       <span class="refresh-error" role="alert" title={refreshError}>Refresh failed</span>
     {/if}
+    {#if availability.cooldown > 0 && !availability.busy}
+      <span class="cooldown num" aria-hidden="true">{availability.cooldown}s</span>
+    {/if}
     <IconButton
       icon="refresh"
-      label={battle ? "Refresh statistics" : "Refresh statistics, available once a battle loads"}
-      disabled={!battle || refreshing}
+      label={refreshLabel(availability)}
+      busy={availability.hasBattle && availability.busy}
+      disabled={!availability.hasBattle}
+      aria-disabled={availability.hasBattle && !canRefresh(availability) ? "true" : undefined}
       onclick={refresh}
     />
     <IconButton icon="settings" label="Settings" onclick={openSettings} />
@@ -99,16 +134,11 @@
   .top-bar {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-    min-height: calc(var(--target-min) + var(--space-4));
-    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+    gap: var(--space-4);
+    min-height: calc(var(--target-min) + var(--space-5));
+    padding: 0 var(--space-3) 0 var(--space-5);
     border-bottom: 1px solid var(--border);
-    background: var(--surface);
-  }
-
-  .logo {
-    flex: none;
-    color: var(--accent);
+    background: var(--bg);
   }
 
   .match {
@@ -126,33 +156,22 @@
     overflow: hidden;
     font-family: var(--font-display);
     font-size: var(--fs-lg);
-    font-weight: 600;
+    font-weight: var(--weight-strong);
     text-overflow: ellipsis;
-  }
-
-  .mode {
-    color: var(--text-muted);
-    font-size: var(--fs-md);
   }
 
   .tag,
   .chip {
     flex: none;
-    padding: 0 var(--space-2);
-    border-radius: var(--radius-sm);
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    line-height: 1.6;
-  }
-
-  .tag {
-    background: var(--surface-hover);
-    color: var(--text);
-  }
-
-  .chip {
-    border: 1px solid var(--border-strong);
     color: var(--text-muted);
+    font-size: var(--fs-sm);
+  }
+
+  .tag::before,
+  .chip::before {
+    content: "·" / "";
+    margin-right: var(--space-2);
+    color: var(--text-faint);
   }
 
   .status {
@@ -164,46 +183,76 @@
     color: var(--text-muted);
     font-size: var(--fs-sm);
     white-space: nowrap;
+    transition: color var(--duration-base) var(--ease-out);
   }
 
-  .dot {
-    width: var(--space-2);
-    height: var(--space-2);
-    border-radius: 50%;
-    background: var(--text-faint);
+  .radar {
+    flex: none;
+    color: var(--text-faint);
+    overflow: visible;
+    transition: color var(--duration-base) var(--ease-out);
   }
 
-  .busy .dot {
-    background: var(--info);
-    animation: pulse calc(var(--duration-base) * 4) var(--ease-out) infinite alternate;
+  .ring {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.25;
+    opacity: 0.6;
   }
 
-  .live .dot {
-    background: var(--success);
+  .sweep {
+    fill: currentColor;
+    opacity: 0.5;
+    transform-origin: 8px 8px;
+    animation: sweep 3s linear infinite;
+  }
+
+  .core {
+    fill: currentColor;
+  }
+
+  .busy .radar {
+    color: var(--info);
+  }
+
+  .busy .sweep {
+    animation-duration: 1s;
   }
 
   .live {
     color: var(--text);
   }
 
-  .attention .dot {
-    background: var(--warning);
+  .live .radar {
+    color: var(--success);
   }
 
-  @keyframes pulse {
-    from {
-      opacity: 1;
-    }
+  .attention,
+  .attention .radar {
+    color: var(--warning);
+  }
 
+  .live .sweep,
+  .attention .sweep {
+    opacity: 0;
+    animation: none;
+  }
+
+  @keyframes sweep {
     to {
-      opacity: 0.35;
+      rotate: 1turn;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .busy .dot {
+    .sweep {
       animation: none;
     }
+  }
+
+  .cooldown {
+    color: var(--text-faint);
+    font-size: var(--fs-xs);
   }
 
   .actions {

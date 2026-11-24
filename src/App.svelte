@@ -47,6 +47,7 @@
   const needsSetup = $derived(
     app.snapshot?.phase === "needsInstall" || app.snapshot?.phase === "needsApplicationId",
   );
+  const screen = $derived(app.view === "settings" ? "settings" : needsSetup ? "setup" : "monitor");
 </script>
 
 {#if startError}
@@ -58,15 +59,33 @@
   <main class="boot" aria-busy="true">
     <span class="visually-hidden">Starting Crowsnest</span>
   </main>
-{:else if app.view === "settings"}
-  <Settings />
-{:else if needsSetup}
-  <Setup />
 {:else}
-  <Monitor />
+  {#key screen}
+    <div class="screen">
+      {#if screen === "settings"}
+        <Settings />
+      {:else if screen === "setup"}
+        <Setup />
+      {:else}
+        <Monitor />
+      {/if}
+    </div>
+  {/key}
 {/if}
 
 <style>
+  .screen {
+    height: 100%;
+    animation: screen-in var(--duration-base) var(--ease-out);
+  }
+
+  @keyframes screen-in {
+    from {
+      opacity: 0;
+      translate: 0 var(--space-2);
+    }
+  }
+
   .boot {
     display: grid;
     place-content: center;
@@ -80,6 +99,7 @@
     margin: 0;
     font-family: var(--font-display);
     font-size: var(--fs-xl);
+    font-weight: var(--weight-strong);
   }
 
   .boot p {

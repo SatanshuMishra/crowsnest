@@ -69,23 +69,13 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    background: var(--surface);
-    overflow: hidden;
-  }
-
-  .allies {
-    --team-accent: var(--ally);
-  }
-
-  .enemies {
-    --team-accent: var(--enemy);
   }
 
   .scroll {
     flex: 1;
     min-height: 0;
+    margin: 0 calc(-1 * var(--cell-pad)) 0 calc(-1 * (var(--cell-pad) + var(--space-4)));
+    padding-left: var(--space-4);
     overflow: auto;
   }
 
@@ -99,66 +89,55 @@
     position: sticky;
     top: 0;
     z-index: 1;
-    background: var(--surface);
+    background: var(--bg);
   }
 
   th {
-    padding: var(--space-1) var(--space-2);
+    padding: var(--space-1) var(--cell-pad);
     border-bottom: 1px solid var(--border-strong);
+    background: var(--bg);
     color: var(--text-muted);
     font-size: var(--fs-xs);
-    font-weight: 600;
+    font-weight: var(--weight-regular);
     white-space: nowrap;
-    background: var(--surface);
   }
 
   .text-head {
+    padding-bottom: var(--space-2);
     text-align: left;
     vertical-align: bottom;
   }
 
-  .player-head {
-    padding-left: var(--space-3);
-  }
-
   .group {
-    padding-bottom: 0;
-    border-bottom-color: var(--border);
-    color: var(--text-faint);
-    font-weight: 600;
+    padding-bottom: var(--space-1);
+    border-bottom: 0;
+    background: linear-gradient(var(--border-strong), var(--border-strong)) center bottom / calc(100% - var(--space-3)) 1px
+      no-repeat var(--bg);
     text-align: center;
   }
 
   .stat-head {
-    padding: var(--space-1);
+    padding-bottom: var(--space-2);
     text-align: right;
-  }
-
-  .stat-head:last-child,
-  .group:last-child {
-    padding-right: var(--space-3);
   }
 
   .solo {
     margin-left: var(--space-1);
-    padding: 0 var(--space-1);
-    border-radius: var(--radius-sm);
-    background: var(--surface-hover);
-    color: var(--text);
+    color: var(--text-faint);
+  }
+
+  .solo::before {
+    content: "·" / "";
+    margin-right: var(--space-1);
   }
 
   .empty {
-    padding: var(--space-4) var(--space-3);
+    padding: var(--space-4) var(--space-2);
     color: var(--text-muted);
     font-size: var(--fs-sm);
-    text-align: center;
   }
 
   @media (width < 1100px) {
-    .team {
-      overflow: visible;
-    }
-
     .scroll {
       overflow: visible;
     }

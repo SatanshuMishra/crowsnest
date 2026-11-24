@@ -77,9 +77,9 @@
 
   .column {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-6);
     width: 100%;
-    max-width: calc(var(--space-6) * 18);
+    max-width: var(--measure);
   }
 
   .brand {
@@ -89,27 +89,28 @@
   }
 
   .mark {
-    width: calc(var(--space-6) + var(--space-3));
-    height: calc(var(--space-6) + var(--space-3));
+    width: var(--space-6);
+    height: var(--space-6);
   }
 
   h1 {
     margin: 0;
     font-family: var(--font-display);
-    font-size: var(--fs-xl);
-    font-weight: 600;
+    font-size: var(--fs-lg);
+    font-weight: var(--weight-strong);
   }
 
   .step {
     display: grid;
-    gap: var(--space-3);
+    gap: var(--space-4);
   }
 
   h2 {
     margin: 0;
     font-family: var(--font-display);
-    font-size: var(--fs-lg);
-    font-weight: 600;
+    font-size: var(--fs-xl);
+    font-weight: var(--weight-strong);
+    letter-spacing: var(--tracking-display);
   }
 
   p {
@@ -119,13 +120,14 @@
   }
 
   a {
-    color: var(--accent);
-    font-weight: 600;
+    color: var(--text);
     text-decoration: underline;
+    text-decoration-color: var(--text-faint);
+    text-underline-offset: 0.2em;
   }
 
   a:hover {
-    color: var(--accent-strong);
+    text-decoration-color: currentColor;
   }
 
   .feedback:empty {

@@ -38,7 +38,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-4);
+    gap: var(--space-5);
     min-height: 40px;
   }
 
@@ -48,7 +48,6 @@
 
   label {
     font-size: var(--fs-md);
-    font-weight: 600;
     cursor: pointer;
   }
 
@@ -61,34 +60,42 @@
   .switch {
     position: relative;
     flex: none;
-    width: 40px;
-    height: 22px;
+    width: 36px;
+    height: 20px;
     padding: 0;
-    border: 1px solid var(--border-strong);
+    border: 1px solid var(--text-faint);
     border-radius: 999px;
-    background: var(--surface-hover);
+    background: transparent;
     cursor: pointer;
-    transition: background var(--duration-fast) var(--ease-out);
+    transition:
+      background var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out);
+  }
+
+  .switch::before {
+    position: absolute;
+    inset: -5px -4px;
+    content: "";
   }
 
   .thumb {
     position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 16px;
-    height: 16px;
+    top: 3px;
+    left: 3px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
     background: var(--text-muted);
     transition: transform var(--duration-base) var(--ease-out);
   }
 
   .switch[aria-checked="true"] {
-    background: var(--accent);
     border-color: var(--accent);
+    background: var(--accent);
   }
 
   .switch[aria-checked="true"] .thumb {
-    transform: translateX(18px);
+    transform: translateX(16px);
     background: var(--accent-contrast);
   }
 

@@ -51,7 +51,6 @@
   <section class="state" aria-labelledby="{id}-title">
     {#if snapshot.phase === "replaysDisabled"}
       <div class="panel">
-        <span class="mark warning"><Icon name="warning" size={24} /></span>
         <h2 id="{id}-title">Replays are turned off</h2>
         <p>
           Crowsnest reads each battle from a file the game writes into its replays folder when a battle loads. With
@@ -92,8 +91,7 @@
         </div>
       </div>
     {:else if snapshot.phase === "waiting"}
-      <div class="panel calm">
-        <span class="mark"><Icon name="anchor" size={24} /></span>
+      <div class="panel">
         <h2 id="{id}-title">Waiting for a battle</h2>
         <p>The player table appears here as soon as a battle loads.</p>
         <dl class="paths">
@@ -123,7 +121,6 @@
       </div>
     {:else}
       <div class="panel">
-        <span class="mark warning"><Icon name="settings" size={24} /></span>
         <h2 id="{id}-title">Crowsnest needs setting up</h2>
         <p>Choose the game folder and the Wargaming application id before the monitor can start.</p>
         <div class="actions">
@@ -139,16 +136,15 @@
     display: flex;
     align-items: flex-start;
     gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--notice-tone);
-    border-left-width: 3px;
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--notice-tone) var(--highlight-fill-alpha), var(--surface));
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border);
     color: var(--text);
     font-size: var(--fs-md);
   }
 
   .notice :global(svg) {
+    flex: none;
+    margin-top: 0.125em;
     color: var(--notice-tone);
   }
 
@@ -172,7 +168,7 @@
     display: grid;
     flex: 1;
     place-items: center;
-    padding: var(--space-6) var(--space-4);
+    padding: var(--space-6) 0 calc(var(--space-6) * 2);
   }
 
   .panel {
@@ -180,39 +176,21 @@
     flex-direction: column;
     align-items: flex-start;
     gap: var(--space-3);
-    width: min(100%, calc(var(--space-6) * 18));
-    padding: var(--space-5);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    background: var(--surface);
-  }
-
-  .calm {
-    align-items: center;
-    text-align: center;
-  }
-
-  .mark {
-    display: inline-grid;
-    place-items: center;
-    color: var(--accent);
-  }
-
-  .mark.warning {
-    color: var(--warning);
+    width: min(100%, var(--measure));
   }
 
   h2 {
     margin: 0;
     font-family: var(--font-display);
     font-size: var(--fs-xl);
-    font-weight: 600;
+    font-weight: var(--weight-strong);
+    letter-spacing: var(--tracking-display);
   }
 
   h3 {
-    margin: 0;
+    margin: var(--space-2) 0 0;
     font-size: var(--fs-md);
-    font-weight: 600;
+    font-weight: var(--weight-strong);
   }
 
   p,
@@ -225,14 +203,16 @@
   ol {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: var(--space-2);
     padding-left: var(--space-5);
   }
 
+  li::marker {
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
   code {
-    padding: 0 var(--space-1);
-    border-radius: var(--radius-sm);
-    background: var(--surface-hover);
     color: var(--text);
     font-family: var(--font-mono);
     font-size: var(--fs-sm);
@@ -246,34 +226,35 @@
   .actions {
     display: flex;
     gap: var(--space-2);
+    margin-top: var(--space-2);
   }
 
   .paths {
     display: grid;
-    gap: var(--space-2);
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-2) var(--space-5);
     width: 100%;
-    margin: var(--space-2) 0 0;
-    text-align: left;
+    margin: var(--space-3) 0 0;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
   }
 
   .paths div {
-    display: grid;
-    gap: var(--space-1);
+    display: contents;
   }
 
   dt {
     color: var(--text-muted);
-    font-size: var(--fs-xs);
-    font-weight: 600;
-    text-transform: uppercase;
+    font-size: var(--fs-sm);
   }
 
   dd {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: var(--space-2);
+    gap: 0 var(--space-2);
     margin: 0;
+    min-width: 0;
   }
 
   .source {
@@ -285,11 +266,12 @@
     display: grid;
     gap: var(--space-2);
     width: 100%;
+    margin-top: var(--space-2);
   }
 
   .bar {
     height: var(--row-height);
-    border-radius: var(--radius-sm);
+    border-radius: 2px;
     background: var(--surface-hover);
     animation: pulse calc(var(--duration-base) * 4) var(--ease-out) infinite alternate;
   }

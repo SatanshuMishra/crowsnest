@@ -122,7 +122,7 @@
   .product {
     font-family: var(--font-display);
     font-size: var(--fs-lg);
-    font-weight: 600;
+    font-weight: var(--weight-strong);
   }
 
   .version,
@@ -133,6 +133,8 @@
   }
 
   .privacy {
+    max-width: var(--measure);
+    color: var(--text-muted);
     font-size: var(--fs-md);
   }
 
@@ -156,15 +158,20 @@
     align-items: center;
     gap: var(--space-1);
     min-height: var(--target-min);
-    color: var(--accent);
+    color: var(--text);
     font-size: var(--fs-md);
-    font-weight: 600;
     text-decoration: underline;
+    text-decoration-color: var(--text-faint);
+    text-underline-offset: 0.2em;
     border-radius: var(--radius-sm);
   }
 
   a:hover {
-    color: var(--accent-strong);
+    text-decoration-color: currentColor;
+  }
+
+  a :global(svg) {
+    color: var(--text-faint);
   }
 
   .logs {

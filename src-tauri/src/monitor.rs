@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
@@ -125,7 +125,9 @@ impl Monitor {
         }
 
         let monitor = self.clone();
-        match ArenaWatcher::start(replays_dir, move |event| monitor.on_arena(event)) {
+        match ArenaWatcher::start(watch_root(&replays_dir), move |event| {
+            monitor.on_arena(event)
+        }) {
             Ok(watcher) => *lock(&self.0.watcher) = Some(watcher),
             Err(error) => {
                 log::warn!("arena watcher failed to start: {error}");
@@ -554,6 +556,25 @@ fn sorted(players: Vec<Player>) -> Vec<Player> {
     ordered
 }
 
+fn is_version_folder(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            name.contains('.')
+                && name
+                    .split('.')
+                    .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        })
+}
+
+fn watch_root(replays_dir: &Path) -> PathBuf {
+    replays_dir
+        .parent()
+        .filter(|_| is_version_folder(replays_dir))
+        .unwrap_or(replays_dir)
+        .to_path_buf()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -717,5 +738,20 @@ mod tests {
         );
         let tagged = with_clans(battle, &roster);
         assert_eq!(tagged.allies.players[0].clan_tag.as_deref(), Some("NEST"));
+    }
+
+    #[test]
+    fn versioned_replays_folders_are_watched_from_their_parent() {
+        let base = Path::new("C:/Games/World_of_Warships/replays");
+        assert_eq!(watch_root(&base.join("15.10.0.0")), base);
+        assert_eq!(watch_root(base), base);
+        assert_eq!(
+            watch_root(Path::new("D:/my.replays")),
+            Path::new("D:/my.replays")
+        );
+        assert_eq!(
+            watch_root(Path::new("D:/replays/15..0")),
+            Path::new("D:/replays/15..0")
+        );
     }
 }

@@ -54,7 +54,7 @@ impl ArenaWatcher {
         let (batches, received) = mpsc::channel();
         let mut debouncer = new_debouncer(DEBOUNCE, None, batches).map_err(watch_failure)?;
         debouncer
-            .watch(&replays_dir, RecursiveMode::NonRecursive)
+            .watch(&replays_dir, RecursiveMode::Recursive)
             .map_err(watch_failure)?;
         let stopping = Arc::new(AtomicBool::new(false));
         let worker = Worker {
@@ -244,13 +244,30 @@ fn read_when_ready(path: &Path, stopping: &AtomicBool) -> Option<ArenaInfo> {
     }
 }
 
+fn entries_of(dir: &Path) -> Vec<PathBuf> {
+    fs::read_dir(dir)
+        .inspect_err(|error| log::warn!("could not list {}: {error}", dir.display()))
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn existing_arena_file(replays_dir: &Path) -> Option<PathBuf> {
-    fs::read_dir(replays_dir)
-        .inspect_err(|error| log::warn!("could not list {}: {error}", replays_dir.display()))
-        .ok()?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .find(|path| is_arena_file(path) && path.is_file())
+    let top_level = entries_of(replays_dir);
+    let one_level_down: Vec<PathBuf> = top_level
+        .iter()
+        .filter(|path| path.is_dir())
+        .flat_map(|dir| entries_of(dir))
+        .collect();
+    top_level
+        .into_iter()
+        .chain(one_level_down)
+        .filter(|path| is_arena_file(path) && path.is_file())
+        .max_by_key(|path| fs::metadata(path).and_then(|meta| meta.modified()).ok())
 }
 
 fn batch_changes(batch: DebounceEventResult) -> Vec<Change> {
@@ -592,6 +609,36 @@ mod tests {
         assert_eq!(
             events.recv_timeout(PATIENCE),
             Err(RecvTimeoutError::Disconnected)
+        );
+    }
+
+    #[test]
+    fn a_battle_in_a_version_folder_created_after_start_is_reported() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let (_watcher, events) = start_collecting(dir.path());
+        let version_folder = dir.path().join("15.11.0.0");
+
+        fs::create_dir(&version_folder).expect("the version folder is created");
+        fs::write(version_folder.join(FILE_NAME), FIXTURE).expect("the fixture is written");
+
+        assert_eq!(
+            events.recv_timeout(PATIENCE),
+            Ok(ArenaEvent::Started(fixture()))
+        );
+    }
+
+    #[test]
+    fn an_arena_file_in_a_version_folder_at_start_up_counts_as_created() {
+        let dir = tempfile::tempdir().expect("a temporary folder");
+        let version_folder = dir.path().join("15.10.0.0");
+        fs::create_dir(&version_folder).expect("the version folder is created");
+        fs::write(version_folder.join(FILE_NAME), FIXTURE).expect("the fixture is written");
+
+        let (_watcher, events) = start_collecting(dir.path());
+
+        assert_eq!(
+            events.recv_timeout(PATIENCE),
+            Ok(ArenaEvent::Started(fixture()))
         );
     }
 }

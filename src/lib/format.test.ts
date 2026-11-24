@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clientVersionLabel,
   MISSING,
   THIN_SPACE,
   formatDamage,
@@ -135,5 +136,15 @@ describe("labels", () => {
     expect(regionLabel("eu")).toBe("EU");
     expect(regionLabel("na")).toBe("NA");
     expect(regionName("asia")).toBe("Asia");
+  });
+});
+
+describe("clientVersionLabel", () => {
+  it("shows the comma form the game writes with dots", () => {
+    expect(clientVersionLabel("15,10,0,13533378")).toBe("15.10.0.13533378");
+  });
+
+  it("leaves a dotted version as it is", () => {
+    expect(clientVersionLabel(" 15.10.0.0.13533378 ")).toBe("15.10.0.0.13533378");
   });
 });

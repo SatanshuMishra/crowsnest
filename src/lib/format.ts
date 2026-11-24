@@ -158,3 +158,7 @@ export function regionLabel(region: Region): string {
 export function regionName(region: Region): string {
   return REGIONS[region].name;
 }
+
+export function clientVersionLabel(version: string): string {
+  return version.trim().replaceAll(",", ".");
+}

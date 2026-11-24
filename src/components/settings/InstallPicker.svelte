@@ -1,6 +1,7 @@
 <script lang="ts">
   import { open } from "@tauri-apps/plugin-dialog";
   import { backend } from "../../lib/backend";
+  import { clientVersionLabel } from "../../lib/format";
   import { app } from "../../lib/state.svelte";
   import type { GameInstall, InstallSource } from "../../lib/types";
   import Button from "../ui/Button.svelte";
@@ -146,7 +147,7 @@
       <dt>Found by</dt>
       <dd>{sourceLabels[install.source]}</dd>
       <dt>Client version</dt>
-      <dd class="num">{install.clientVersion ?? "Not known yet"}</dd>
+      <dd class="num">{install.clientVersion ? clientVersionLabel(install.clientVersion) : "Not known yet"}</dd>
       <dt>Replays folder</dt>
       <dd class="path">{install.replaysDir}</dd>
       <dt>Replays</dt>
@@ -190,7 +191,7 @@
           <span class="candidate-text">
             <span class="path">{candidate.root}</span>
             <span class="meta">
-              {sourceLabels[candidate.source]}{candidate.clientVersion ? `, version ${candidate.clientVersion}` : ""}
+              {sourceLabels[candidate.source]}{candidate.clientVersion ? `, version ${clientVersionLabel(candidate.clientVersion)}` : ""}
             </span>
           </span>
         </label>

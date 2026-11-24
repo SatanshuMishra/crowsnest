@@ -10,18 +10,36 @@
   }
 
   let { icon, label, pressed, busy = false, disabled = false, type = "button", ...rest }: Props = $props();
+
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let spinning = $state(false);
+
+  $effect(() => {
+    if (busy) {
+      spinning = true;
+    } else if (reducedMotion.matches) {
+      spinning = false;
+    }
+  });
+
+  function finishTurn() {
+    if (!busy) {
+      spinning = false;
+    }
+  }
 </script>
 
 <button
   {...rest}
   {type}
   class="icon-button"
-  class:busy
+  class:busy={spinning}
   aria-label={label}
   title={label}
   aria-pressed={pressed}
   aria-busy={busy || undefined}
   {disabled}
+  onanimationiteration={finishTurn}
 >
   <Icon name={icon} size={18} />
 </button>

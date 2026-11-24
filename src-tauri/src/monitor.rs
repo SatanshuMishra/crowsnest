@@ -194,6 +194,7 @@ impl Monitor {
             || self.is_attachment(attachment),
             |_| Snapshot {
                 phase,
+                connected: false,
                 install: Some(install.clone()),
                 battle: None,
                 notice: install_notice,
@@ -236,6 +237,7 @@ impl Monitor {
             self.update_if(
                 || self.is_attachment(attachment),
                 |snapshot| Snapshot {
+                    connected: false,
                     notice: Some(notice(NoticeLevel::Info, message)),
                     ..snapshot
                 },
@@ -253,6 +255,7 @@ impl Monitor {
                 self.update_if(
                     || self.is_attachment(attachment),
                     |snapshot| Snapshot {
+                        connected: true,
                         notice: snapshot
                             .notice
                             .filter(|notice| notice.level != NoticeLevel::Info),
@@ -266,6 +269,7 @@ impl Monitor {
                 self.update_if(
                     || self.is_attachment(attachment),
                     |snapshot| Snapshot {
+                        connected: false,
                         notice: Some(notice(NoticeLevel::Error, error.to_string())),
                         ..snapshot
                     },
@@ -327,6 +331,7 @@ impl Monitor {
         let live = self.0.battle_live.load(Ordering::SeqCst);
         self.update(|snapshot| Snapshot {
             phase: if live { Phase::Loading } else { snapshot.phase },
+            connected: snapshot.connected,
             install: snapshot.install.map(|install| GameInstall {
                 region: install_region.or(install.region),
                 ..install

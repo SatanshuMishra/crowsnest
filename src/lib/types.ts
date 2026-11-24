@@ -125,6 +125,7 @@ export interface Notice {
 
 export interface Snapshot {
   phase: Phase;
+  connected: boolean;
   install: GameInstall | null;
   battle: Battle | null;
   notice: Notice | null;

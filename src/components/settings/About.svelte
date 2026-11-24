@@ -27,6 +27,11 @@
       label: "World of Warships",
       detail: "The game, by Wargaming",
     },
+    {
+      href: "https://wargaming.net/support/",
+      label: "Wargaming Player Support",
+      detail: "Help with your Wargaming account or the game",
+    },
   ];
 
   let linkError = $state<string | null>(null);
@@ -99,7 +104,11 @@
     {/if}
   </div>
 
-  <p class="legal">© Wargaming.net. All rights reserved. Crowsnest is not affiliated with Wargaming.</p>
+  <p class="legal">
+    © 2026 Satanshu Mishra. Crowsnest is licensed under the Apache License 2.0.
+    <br />
+    © Wargaming.net. All rights reserved. Crowsnest is not affiliated with Wargaming.
+  </p>
 </div>
 
 <style>

@@ -42,6 +42,9 @@
           "url": "https://developers.wargaming.net/*"
         },
         {
+          "url": "https://wargaming.net/support/*"
+        },
+        {
           "url": "https://github.com/SatanshuMishra/crowsnest"
         }
       ]

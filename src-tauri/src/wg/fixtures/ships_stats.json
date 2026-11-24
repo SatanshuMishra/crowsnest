@@ -1,0 +1,53 @@
+{
+  "status": "ok",
+  "meta": {
+    "count": 1,
+    "hidden": null
+  },
+  "data": {
+    "500100001": [
+      {
+        "ship_id": 4181604176,
+        "pvp": {
+          "battles": 310,
+          "wins": 182,
+          "survived_battles": 121,
+          "damage_dealt": 30380000,
+          "frags": 372,
+          "xp": 527000
+        },
+        "pvp_solo": {
+          "battles": 240,
+          "wins": 137,
+          "survived_battles": 90,
+          "damage_dealt": 23280000,
+          "frags": 281,
+          "xp": 400800
+        }
+      },
+      {
+        "ship_id": 3751704560,
+        "pvp": {
+          "battles": 44,
+          "wins": 21,
+          "survived_battles": 15,
+          "damage_dealt": 2420000,
+          "frags": 38,
+          "xp": 52800
+        },
+        "pvp_solo": null
+      },
+      {
+        "ship_id": 4074649552,
+        "pvp": {
+          "battles": 7,
+          "wins": 4,
+          "survived_battles": 2,
+          "damage_dealt": 361000,
+          "frags": 5,
+          "xp": 8400
+        }
+      }
+    ]
+  }
+}

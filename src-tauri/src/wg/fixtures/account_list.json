@@ -1,0 +1,20 @@
+{
+  "status": "ok",
+  "meta": {
+    "count": 3
+  },
+  "data": [
+    {
+      "nickname": "Harbor_Pilot",
+      "account_id": 500100001
+    },
+    {
+      "nickname": "quiet_gull",
+      "account_id": 500100002
+    },
+    {
+      "nickname": "TideWatcher_77",
+      "account_id": 500100003
+    }
+  ]
+}

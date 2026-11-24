@@ -1,4 +1,5 @@
 mod arena;
+mod body;
 mod commands;
 mod game;
 mod model;

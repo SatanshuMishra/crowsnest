@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::body::{MAX_RESPONSE_BYTES, read_limited};
 use crate::model::ExpectedStats;
 
 const EXPECTED_VALUES_URL: &str = "https://api.wows-numbers.com/personal/rating/expected/json/";
@@ -118,14 +119,16 @@ fn fall_back_to_cache(
 }
 
 async fn download(http: &reqwest::Client) -> Result<String, ExpectedError> {
-    http.get(EXPECTED_VALUES_URL)
+    let response = http
+        .get(EXPECTED_VALUES_URL)
         .send()
         .await
         .and_then(|response| response.error_for_status())
-        .map_err(|error| ExpectedError::Network(error.to_string()))?
-        .text()
+        .map_err(|error| ExpectedError::Network(error.to_string()))?;
+    let body = read_limited(response, MAX_RESPONSE_BYTES)
         .await
-        .map_err(|error| ExpectedError::Network(error.to_string()))
+        .map_err(|error| ExpectedError::Network(error.to_string()))?;
+    String::from_utf8(body).map_err(|error| ExpectedError::Decode(error.to_string()))
 }
 
 impl ExpectedValues {

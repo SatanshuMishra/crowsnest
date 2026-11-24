@@ -1,0 +1,52 @@
+{
+    "matchGroup": "pvp",
+    "gameMode": 7,
+    "gameType": "RandomBattle",
+    "clientVersionFromExe": "15,10,0,13533378",
+    "clientVersionFromXml": "15,10,0,13533378",
+    "mapId": 38,
+    "mapName": "spaces/38_Canada",
+    "mapDisplayName": "38_Canada",
+    "scenario": "Domination",
+    "name": "12x12",
+    "playersPerTeam": 12,
+    "teamsCount": 2,
+    "duration": 1200,
+    "dateTime": "29.10.2026 19:21:49",
+    "playerName": "Player01",
+    "playerVehicle": "PRSB108-Vladivostok",
+    "playerID": 0,
+    "weatherParams": {
+        "0": [
+            "Gloomy"
+        ]
+    },
+    "battleItemTrees": {},
+    "disabledShipClasses": [],
+    "vehicles": [
+        {"shipId": 4181604176, "relation": 0, "id": 1043512, "name": "Player01"},
+        {"shipId": 3751753680, "relation": 1, "id": 1043513, "name": "Player02"},
+        {"shipId": 4282300400, "relation": 1, "id": 1043514, "name": "Player03"},
+        {"shipId": 3762206416, "relation": 1, "id": 1043515, "name": "Player04"},
+        {"shipId": 4074649552, "relation": 1, "id": 1043516, "name": "Player05"},
+        {"shipId": 3655251952, "relation": 1, "id": 1043517, "name": "Player06"},
+        {"shipId": 4179506160, "relation": 1, "id": 1043518, "name": "Player07"},
+        {"shipId": 3550394320, "relation": 1, "id": 1043519, "name": "Player08"},
+        {"shipId": 4277090288, "relation": 1, "id": 1043520, "name": "Player09"},
+        {"shipId": 3763287504, "relation": 1, "id": 1043521, "name": "Player10"},
+        {"shipId": 4180555728, "relation": 1, "id": 1043522, "name": "Player11"},
+        {"shipId": 3761190896, "relation": 1, "id": 1043523, "name": "Player12"},
+        {"shipId": 3654203344, "relation": 2, "id": 1043524, "name": "Player13"},
+        {"shipId": 4076746704, "relation": 2, "id": 1043525, "name": "Player14"},
+        {"shipId": 3762173936, "relation": 2, "id": 1043526, "name": "Player15"},
+        {"shipId": 4183701488, "relation": 2, "id": 1043527, "name": "Player16"},
+        {"shipId": 3553540080, "relation": 2, "id": 1043528, "name": "Player17"},
+        {"shipId": 4281317360, "relation": 2, "id": 1043529, "name": "Player18"},
+        {"shipId": 3657349104, "relation": 2, "id": 1043530, "name": "Player19"},
+        {"shipId": 4073600976, "relation": 2, "id": 1043531, "name": "Player20"},
+        {"shipId": 3764336080, "relation": 2, "id": 1043532, "name": "Player21"},
+        {"shipId": 4278138864, "relation": 2, "id": 1043533, "name": "Player22"},
+        {"shipId": 3552491504, "relation": 2, "id": 1043534, "name": "Player23"},
+        {"shipId": 4179539408, "relation": 2, "id": 1043535, "name": ":Player24:"}
+    ]
+}

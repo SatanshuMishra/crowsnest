@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2](https://github.com/SatanshuMishra/crowsnest/compare/v1.0.1...v1.0.2) (2026-11-24)
+
+
+### Bug Fixes
+
+* **monitor:** retry failed stat loads and keep stats on refresh ([10cc77f](https://github.com/SatanshuMishra/crowsnest/commit/10cc77fde123ef48b4f41859b8717ab8e5a047c1))
+* **monitor:** retry failed stat loads and keep stats on refresh ([33a308b](https://github.com/SatanshuMishra/crowsnest/commit/33a308bf4116e1996493ab70a66b28f90c366cbd))
+
 ## [1.0.1](https://github.com/SatanshuMishra/crowsnest/compare/v1.0.0...v1.0.1) (2026-11-24)
 
 

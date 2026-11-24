@@ -13,15 +13,15 @@ While the version is below 1.0.0, `feat:` bumps the minor version and `fix:` bum
 
 ## One-time repository setup
 
-These secrets must exist under Settings, Secrets and variables, Actions:
+These secrets must exist in the `release` environment under Settings, Environments, with deployments limited to the `main` branch. Only the publish job runs in that environment, so pull request builds never see them:
 
 | Secret | What it holds |
 |---|---|
 | `TAURI_SIGNING_PRIVATE_KEY` | Contents of the private update-signing key (`~/.tauri/crowsnest.key` on the maintainer's machine). |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password. Empty for the current key, but the secret must still exist. |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | The key's password (`~/.tauri/crowsnest.key.password` on the maintainer's machine until it moves to a password manager). |
 | `WG_APPLICATION_ID` | The Wargaming developer application ID compiled into release builds as the default. |
 
-The public half of the signing key lives in `src-tauri/tauri.conf.json` under `plugins.updater.pubkey`. Losing the private key means installed copies can no longer verify updates, so keep a backup of it outside the repository. Rotating it requires shipping one release signed with the old key that carries the new public key.
+The public half of the signing key lives in `src-tauri/tauri.conf.json` under `plugins.updater.pubkey`. Losing the private key means installed copies can no longer verify updates, so keep a backup of the key and its password outside the repository, in separate places. Rotating it requires shipping one release signed with the old key that carries the new public key.
 
 ## Building locally
 
@@ -30,4 +30,4 @@ npm ci
 npm run tauri build
 ```
 
-The installer lands in `src-tauri/target/release/bundle/nsis/`. Because `createUpdaterArtifacts` is on, bundling needs `TAURI_SIGNING_PRIVATE_KEY` in the environment. Without the key, `npm run tauri build -- --no-bundle` still produces the plain executable.
+The installer lands in `src-tauri/target/release/bundle/nsis/`. Because `createUpdaterArtifacts` is on, bundling needs `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in the environment. Without the key, `npm run tauri build -- --no-bundle` still produces the plain executable.

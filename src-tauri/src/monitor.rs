@@ -380,15 +380,13 @@ impl Monitor {
             if !self.is_current(generation) {
                 return;
             }
-            let specs = Arc::clone(&self.0.specs);
-            let (game_root, watch_root, arena) =
-                (game_root.clone(), watch_root.clone(), arena.clone());
-            let found = tauri::async_runtime::spawn_blocking(move || {
-                division::read_divisions(&specs, &game_root, &watch_root, &arena)
-            })
-            .await
-            .ok()
-            .flatten();
+            let found = division::read_divisions(
+                Arc::clone(&self.0.specs),
+                game_root.clone(),
+                watch_root.clone(),
+                arena.clone(),
+            )
+            .await;
             if let Some(divisions) = found {
                 self.update_current(generation, |snapshot| Snapshot {
                     battle: snapshot
@@ -399,6 +397,9 @@ impl Monitor {
                 return;
             }
             tokio::time::sleep(DIVISION_RETRY).await;
+        }
+        if self.is_current(generation) {
+            log::info!("could not read divisions for this battle from the replays folder");
         }
     }
 

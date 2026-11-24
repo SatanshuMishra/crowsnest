@@ -44,10 +44,11 @@ winreg = "0.56"
 
 [dev-dependencies]
 tempfile = "3"
+pickled = "=2.0.0-alpha9"
 
 [profile.release]
 codegen-units = 1
 lto = true
 opt-level = "s"
-panic = "abort"
+panic = "unwind"
 strip = true

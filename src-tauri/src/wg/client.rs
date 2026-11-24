@@ -18,7 +18,7 @@ const BATCH_SIZE: usize = 100;
 const SHIPS_PAGE_SIZE: usize = 100;
 const MAX_STARTS_PER_WINDOW: usize = 8;
 const RATE_WINDOW: Duration = Duration::from_secs(1);
-const RATE_LIMIT_RETRY_DELAY: Duration = Duration::from_secs(1);
+const TRANSIENT_RETRY_DELAY: Duration = Duration::from_secs(1);
 const TOTALS_FIELDS: [&str; 6] = [
     "battles",
     "wins",
@@ -135,7 +135,7 @@ impl WgClient {
         if self.application_id.trim().is_empty() {
             return Err(WgError::InvalidApplicationId);
         }
-        retry_once_when_rate_limited(RATE_LIMIT_RETRY_DELAY, || self.attempt(request)).await
+        retry_once_when_transient(TRANSIENT_RETRY_DELAY, || self.attempt(request)).await
     }
 
     async fn attempt(&self, request: &ApiRequest) -> Result<Payload, WgError> {
@@ -165,14 +165,27 @@ fn transport_failure(error: reqwest::Error) -> WgError {
     WgError::Network(description)
 }
 
-async fn retry_once_when_rate_limited<T, F, Fut>(delay: Duration, attempt: F) -> Result<T, WgError>
+const SOURCE_NOT_AVAILABLE: u16 = 504;
+
+fn is_transient(error: &WgError) -> bool {
+    matches!(
+        error,
+        WgError::RateLimited
+            | WgError::Api {
+                code: SOURCE_NOT_AVAILABLE,
+                ..
+            }
+    )
+}
+
+async fn retry_once_when_transient<T, F, Fut>(delay: Duration, attempt: F) -> Result<T, WgError>
 where
     F: Fn() -> Fut,
     Fut: Future<Output = Result<T, WgError>>,
 {
     match attempt().await {
-        Err(WgError::RateLimited) => {
-            log::debug!("Wargaming rate limited a request; retrying once");
+        Err(error) if is_transient(&error) => {
+            log::debug!("Wargaming request failed with a transient error ({error}); retrying once");
             tokio::time::sleep(delay).await;
             attempt().await
         }
@@ -999,7 +1012,7 @@ mod tests {
         let delay = Duration::from_millis(20);
         let attempts = Cell::new(0);
         let started = Instant::now();
-        let outcome = retry_once_when_rate_limited(delay, || {
+        let outcome = retry_once_when_transient(delay, || {
             attempts.set(attempts.get() + 1);
             let attempt = attempts.get();
             async move {
@@ -1020,7 +1033,7 @@ mod tests {
     async fn persistent_rate_limit_surfaces_after_one_retry() {
         let attempts = Cell::new(0);
         let outcome: Result<(), WgError> =
-            retry_once_when_rate_limited(Duration::from_millis(1), || {
+            retry_once_when_transient(Duration::from_millis(1), || {
                 attempts.set(attempts.get() + 1);
                 async { Err(WgError::RateLimited) }
             })
@@ -1033,7 +1046,7 @@ mod tests {
     async fn other_failures_are_not_retried() {
         let attempts = Cell::new(0);
         let outcome: Result<(), WgError> =
-            retry_once_when_rate_limited(Duration::from_millis(1), || {
+            retry_once_when_transient(Duration::from_millis(1), || {
                 attempts.set(attempts.get() + 1);
                 async { Err(WgError::Network("offline".to_owned())) }
             })
@@ -1159,5 +1172,27 @@ mod tests {
         assert_eq!(client.account_ids(&[]).await, Ok(HashMap::new()));
         assert_eq!(client.accounts(&[]).await, Ok(HashMap::new()));
         assert_eq!(client.clan_tags(&[]).await, Ok(HashMap::new()));
+    }
+
+    #[tokio::test]
+    async fn source_not_available_is_retried_once() {
+        let attempts = Cell::new(0);
+        let outcome = retry_once_when_transient(Duration::from_millis(1), || {
+            attempts.set(attempts.get() + 1);
+            let attempt = attempts.get();
+            async move {
+                if attempt == 1 {
+                    Err(WgError::Api {
+                        code: 504,
+                        message: "SOURCE_NOT_AVAILABLE".to_owned(),
+                    })
+                } else {
+                    Ok(attempt)
+                }
+            }
+        })
+        .await;
+        assert_eq!(outcome, Ok(2));
+        assert_eq!(attempts.get(), 2);
     }
 }

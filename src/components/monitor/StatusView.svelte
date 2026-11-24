@@ -92,16 +92,16 @@
       </div>
     {:else if snapshot.phase === "waiting"}
       <div class="panel">
-        <p class="link" class:connected={snapshot.connected}>
-          <span class="dot" aria-hidden="true"></span>
-          {snapshot.connected ? "Connected to World of Warships" : "Not connected to World of Warships"}
-        </p>
-        <h2 id="{id}-title">Waiting for a battle</h2>
-        <p>
-          {snapshot.connected
-            ? "The player table appears here as soon as a battle loads."
-            : "Crowsnest connects as soon as it can watch the replays folder."}
-        </p>
+        {#if snapshot.connected}
+          <h2 id="{id}-title">Waiting for a battle</h2>
+          <p>The player table appears here as soon as a battle loads.</p>
+        {:else}
+          <h2 id="{id}-title">Waiting for the replays folder</h2>
+          <p>
+            Crowsnest watches for battles once it can read this folder. The game creates it when your first battle
+            starts. If the game records replays somewhere else, choose that folder in Settings.
+          </p>
+        {/if}
         <dl class="paths">
           <div>
             <dt>Game folder</dt>
@@ -120,7 +120,6 @@
               {#if replaysDir}
                 <code>{replaysDir}</code>
                 {#if settings.replaysDirOverride}<span class="source">chosen in Settings</span>{/if}
-                {#if snapshot.connected}<span class="source">watching for new battles</span>{/if}
               {:else}
                 <span class="source">Not detected</span>
               {/if}
@@ -269,32 +268,6 @@
   .source {
     color: var(--text-faint);
     font-size: var(--fs-sm);
-  }
-
-  .link {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin: 0;
-    color: var(--warning);
-    font-size: var(--fs-sm);
-    font-weight: var(--weight-medium);
-  }
-
-  .link.connected {
-    color: var(--text);
-  }
-
-  .dot {
-    flex: none;
-    width: var(--space-2);
-    height: var(--space-2);
-    border-radius: 50%;
-    background: var(--warning);
-  }
-
-  .connected .dot {
-    background: var(--success);
   }
 
   .skeletons {
